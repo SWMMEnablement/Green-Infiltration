@@ -3,9 +3,37 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Droplets, Layers, Calculator, Info, ArrowDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { 
+  Droplets, 
+  Layers, 
+  Calculator, 
+  Info, 
+  ArrowDown, 
+  Table as TableIcon,
+  Download,
+  BookOpen
+} from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, AreaChart } from "recharts";
 import { motion, AnimatePresence } from "framer-motion";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { useToast } from "@/hooks/use-toast";
 
 interface GreenAmptParams {
   suctionHead: number;
@@ -85,6 +113,7 @@ const soilPresets = {
 };
 
 export default function GreenAmptPage() {
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("standard");
   
   const [standardParams, setStandardParams] = useState<GreenAmptParams>({
@@ -136,10 +165,27 @@ export default function GreenAmptPage() {
         fieldCapacity: preset.fieldCapacity
       });
     }
+    toast({
+      title: "Preset Applied",
+      description: `Loaded values for ${soilType.replace(/([A-Z])/g, ' $1').toLowerCase()} soil.`,
+    });
   };
 
+  const copyToClipboard = (data: any[]) => {
+    const headers = Object.keys(data[0]).join(",");
+    const rows = data.map(row => Object.values(row).join(","));
+    const csv = [headers, ...rows].join("\n");
+    navigator.clipboard.writeText(csv);
+    toast({
+      title: "Copied to Clipboard",
+      description: "Data has been copied in CSV format.",
+    });
+  };
+
+  const currentData = activeTab === "standard" ? standardData : modifiedData;
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-emerald-50/50 to-teal-50/30">
+    <div className="min-h-screen bg-gradient-to-br from-green-50 via-emerald-50/50 to-teal-50/30 pb-20">
       <header className="border-b border-green-200/60 bg-white/70 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
           <div className="flex items-center gap-3">
@@ -184,108 +230,200 @@ export default function GreenAmptPage() {
                 transition={{ duration: 0.2 }}
               >
                 <div className="grid lg:grid-cols-3 gap-6">
-                  <Card className="lg:col-span-1 border-green-200/60 shadow-lg shadow-green-500/5">
-                    <CardHeader className="pb-4">
-                      <CardTitle className="flex items-center gap-2 text-lg">
-                        <Calculator className="w-5 h-5 text-green-600" />
-                        Parameters
-                      </CardTitle>
-                      <CardDescription>Standard Green-Ampt infiltration model</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-5">
-                      <div className="space-y-2">
-                        <Label htmlFor="suction-std" className="text-sm font-medium flex items-center justify-between">
-                          <span>Suction Head (ψ)</span>
-                          <span className="text-xs text-muted-foreground font-mono">in</span>
-                        </Label>
-                        <Input
-                          id="suction-std"
-                          type="number"
-                          step="0.1"
-                          value={standardParams.suctionHead}
-                          onChange={(e) => setStandardParams({ ...standardParams, suctionHead: parseFloat(e.target.value) || 0 })}
-                          className="font-mono border-green-200 focus:border-green-400 focus:ring-green-400"
-                          data-testid="input-suction-std"
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label htmlFor="conductivity-std" className="text-sm font-medium flex items-center justify-between">
-                          <span>Conductivity (Ks)</span>
-                          <span className="text-xs text-muted-foreground font-mono">in/hr</span>
-                        </Label>
-                        <Input
-                          id="conductivity-std"
-                          type="number"
-                          step="0.01"
-                          value={standardParams.conductivity}
-                          onChange={(e) => setStandardParams({ ...standardParams, conductivity: parseFloat(e.target.value) || 0 })}
-                          className="font-mono border-green-200 focus:border-green-400 focus:ring-green-400"
-                          data-testid="input-conductivity-std"
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label htmlFor="deficit-std" className="text-sm font-medium flex items-center justify-between">
-                          <span>Initial Deficit (θd)</span>
-                          <span className="text-xs text-muted-foreground font-mono">fraction</span>
-                        </Label>
-                        <Input
-                          id="deficit-std"
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          max="1"
-                          value={standardParams.initialDeficit}
-                          onChange={(e) => setStandardParams({ ...standardParams, initialDeficit: parseFloat(e.target.value) || 0 })}
-                          className="font-mono border-green-200 focus:border-green-400 focus:ring-green-400"
-                          data-testid="input-deficit-std"
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label htmlFor="duration-std" className="text-sm font-medium flex items-center justify-between">
-                          <span>Duration</span>
-                          <span className="text-xs text-muted-foreground font-mono">hours</span>
-                        </Label>
-                        <Input
-                          id="duration-std"
-                          type="number"
-                          step="1"
-                          min="1"
-                          max="24"
-                          value={duration}
-                          onChange={(e) => setDuration(parseFloat(e.target.value) || 6)}
-                          className="font-mono border-green-200 focus:border-green-400 focus:ring-green-400"
-                          data-testid="input-duration-std"
-                        />
-                      </div>
-
-                      <div className="pt-4 border-t border-green-100">
-                        <Label className="text-sm font-medium mb-3 block">Soil Presets</Label>
-                        <div className="grid grid-cols-2 gap-2">
-                          {Object.keys(soilPresets).map((soil) => (
-                            <button
-                              key={soil}
-                              onClick={() => applyPreset(soil as keyof typeof soilPresets)}
-                              className="px-3 py-2 text-xs font-medium rounded-lg bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 transition-colors capitalize"
-                              data-testid={`preset-${soil}`}
-                            >
-                              {soil.replace(/([A-Z])/g, ' $1').trim()}
-                            </button>
-                          ))}
+                  <div className="lg:col-span-1 space-y-6">
+                    <Card className="border-green-200/60 shadow-lg shadow-green-500/5">
+                      <CardHeader className="pb-4">
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                          <Calculator className="w-5 h-5 text-green-600" />
+                          Parameters
+                        </CardTitle>
+                        <CardDescription>Standard Green-Ampt infiltration model</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-5">
+                        <div className="space-y-2">
+                          <Label htmlFor="suction-std" className="text-sm font-medium flex items-center justify-between">
+                            <span>Suction Head (ψ)</span>
+                            <span className="text-xs text-muted-foreground font-mono">in</span>
+                          </Label>
+                          <Input
+                            id="suction-std"
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            value={standardParams.suctionHead}
+                            onChange={(e) => setStandardParams({ ...standardParams, suctionHead: Math.max(0, parseFloat(e.target.value) || 0) })}
+                            className="font-mono border-green-200 focus:border-green-400 focus:ring-green-400"
+                            data-testid="input-suction-std"
+                          />
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="conductivity-std" className="text-sm font-medium flex items-center justify-between">
+                            <span>Conductivity (Ks)</span>
+                            <span className="text-xs text-muted-foreground font-mono">in/hr</span>
+                          </Label>
+                          <Input
+                            id="conductivity-std"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={standardParams.conductivity}
+                            onChange={(e) => setStandardParams({ ...standardParams, conductivity: Math.max(0, parseFloat(e.target.value) || 0) })}
+                            className="font-mono border-green-200 focus:border-green-400 focus:ring-green-400"
+                            data-testid="input-conductivity-std"
+                          />
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="deficit-std" className="text-sm font-medium flex items-center justify-between">
+                            <span>Initial Deficit (θd)</span>
+                            <span className="text-xs text-muted-foreground font-mono">fraction</span>
+                          </Label>
+                          <Input
+                            id="deficit-std"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="1"
+                            value={standardParams.initialDeficit}
+                            onChange={(e) => setStandardParams({ ...standardParams, initialDeficit: Math.min(1, Math.max(0, parseFloat(e.target.value) || 0)) })}
+                            className="font-mono border-green-200 focus:border-green-400 focus:ring-green-400"
+                            data-testid="input-deficit-std"
+                          />
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="duration-std" className="text-sm font-medium flex items-center justify-between">
+                            <span>Duration</span>
+                            <span className="text-xs text-muted-foreground font-mono">hours</span>
+                          </Label>
+                          <Input
+                            id="duration-std"
+                            type="number"
+                            step="1"
+                            min="1"
+                            max="24"
+                            value={duration}
+                            onChange={(e) => setDuration(Math.min(24, Math.max(1, parseFloat(e.target.value) || 6)))}
+                            className="font-mono border-green-200 focus:border-green-400 focus:ring-green-400"
+                            data-testid="input-duration-std"
+                          />
+                        </div>
 
-                  <Card className="lg:col-span-2 border-green-200/60 shadow-lg shadow-green-500/5">
-                    <CardHeader className="pb-4">
-                      <CardTitle className="text-lg">Infiltration Curve</CardTitle>
-                      <CardDescription>f = Ks × (1 + ψ × θd / F)</CardDescription>
+                        <div className="pt-4 border-t border-green-100">
+                          <Label className="text-sm font-medium mb-3 block">Soil Presets</Label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {Object.keys(soilPresets).map((soil) => (
+                              <button
+                                key={soil}
+                                onClick={() => applyPreset(soil as keyof typeof soilPresets)}
+                                className="px-3 py-2 text-xs font-medium rounded-lg bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 transition-colors capitalize"
+                                data-testid={`preset-${soil}`}
+                              >
+                                {soil.replace(/([A-Z])/g, ' $1').trim()}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-green-200/60 shadow-lg shadow-green-500/5">
+                      <CardHeader className="pb-4">
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                          <BookOpen className="w-5 h-5 text-green-600" />
+                          Parameter Glossary
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ScrollArea className="h-[200px]">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-[100px]">Parameter</TableHead>
+                                <TableHead>Description & Units</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              <TableRow>
+                                <TableCell className="font-mono font-medium">ψ</TableCell>
+                                <TableCell className="text-xs text-gray-600">
+                                  <strong>Suction Head (in)</strong><br/>
+                                  Capillary tension at wetting front. Higher for clay, lower for sand.
+                                </TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell className="font-mono font-medium">Ks</TableCell>
+                                <TableCell className="text-xs text-gray-600">
+                                  <strong>Conductivity (in/hr)</strong><br/>
+                                  Rate at which water moves through saturated soil.
+                                </TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell className="font-mono font-medium">θd</TableCell>
+                                <TableCell className="text-xs text-gray-600">
+                                  <strong>Initial Deficit (fraction)</strong><br/>
+                                  Difference between soil porosity and initial moisture content.
+                                </TableCell>
+                              </TableRow>
+                            </TableBody>
+                          </Table>
+                        </ScrollArea>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <Card className="lg:col-span-2 border-green-200/60 shadow-lg shadow-green-500/5 flex flex-col">
+                    <CardHeader className="pb-4 flex flex-row items-center justify-between space-y-0">
+                      <div>
+                        <CardTitle className="text-lg">Infiltration Curve</CardTitle>
+                        <CardDescription>f = Ks × (1 + ψ × θd / F)</CardDescription>
+                      </div>
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" size="sm" className="gap-2 text-green-700 border-green-200 hover:bg-green-50">
+                            <TableIcon className="w-4 h-4" />
+                            View Data
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+                          <DialogHeader>
+                            <DialogTitle>Infiltration Data Table</DialogTitle>
+                            <DialogDescription>
+                              Detailed time-step data for the current simulation.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="flex-1 overflow-auto border rounded-md">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Time (hr)</TableHead>
+                                  <TableHead>Infiltration Rate (in/hr)</TableHead>
+                                  <TableHead>Cumulative Infiltration (in)</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {standardData.map((row, i) => (
+                                  <TableRow key={i}>
+                                    <TableCell>{row.time}</TableCell>
+                                    <TableCell>{row.infiltrationRate}</TableCell>
+                                    <TableCell>{row.cumulativeInfiltration}</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                          <div className="flex justify-end pt-4">
+                            <Button onClick={() => copyToClipboard(standardData)} className="gap-2 bg-green-600 hover:bg-green-700">
+                              <Download className="w-4 h-4" />
+                              Copy to CSV
+                            </Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
                     </CardHeader>
-                    <CardContent>
-                      <div className="h-80">
+                    <CardContent className="flex-1 flex flex-col">
+                      <div className="flex-1 min-h-[300px]">
                         <ResponsiveContainer width="100%" height="100%">
                           <AreaChart data={standardData.filter((_, i) => i % 5 === 0)} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                             <defs>
@@ -351,33 +489,6 @@ export default function GreenAmptPage() {
                     </CardContent>
                   </Card>
                 </div>
-
-                <Card className="border-green-200/60 shadow-lg shadow-green-500/5">
-                  <CardHeader className="pb-4">
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <Info className="w-5 h-5 text-green-600" />
-                      About Green-Ampt Method
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="prose prose-sm prose-green max-w-none">
-                      <p className="text-gray-600 leading-relaxed">
-                        The <strong>Green-Ampt</strong> infiltration method is a physically-based model that assumes 
-                        a sharp wetting front separating saturated soil above from dry soil below. The model requires 
-                        three parameters: <strong>suction head</strong> (capillary potential at the wetting front), 
-                        <strong>saturated hydraulic conductivity</strong>, and <strong>initial moisture deficit</strong>.
-                      </p>
-                      <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200 font-mono text-sm">
-                        <p className="text-green-800 mb-2"><strong>Equation:</strong></p>
-                        <p className="text-green-700">f = Ks × (1 + ψ × θd / F)</p>
-                        <p className="text-green-600 text-xs mt-2">
-                          where f = infiltration rate, Ks = saturated conductivity, ψ = suction head, 
-                          θd = initial deficit, F = cumulative infiltration
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
               </motion.div>
             </TabsContent>
 
@@ -389,165 +500,259 @@ export default function GreenAmptPage() {
                 transition={{ duration: 0.2 }}
               >
                 <div className="grid lg:grid-cols-3 gap-6">
-                  <Card className="lg:col-span-1 border-green-200/60 shadow-lg shadow-green-500/5">
-                    <CardHeader className="pb-4">
-                      <CardTitle className="flex items-center gap-2 text-lg">
-                        <Calculator className="w-5 h-5 text-green-600" />
-                        Parameters
-                      </CardTitle>
-                      <CardDescription>Green-Ampt with redistribution</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="suction-mod" className="text-sm font-medium flex items-center justify-between">
-                          <span>Suction Head (ψ)</span>
-                          <span className="text-xs text-muted-foreground font-mono">in</span>
-                        </Label>
-                        <Input
-                          id="suction-mod"
-                          type="number"
-                          step="0.1"
-                          value={modifiedParams.suctionHead}
-                          onChange={(e) => setModifiedParams({ ...modifiedParams, suctionHead: parseFloat(e.target.value) || 0 })}
-                          className="font-mono border-green-200 focus:border-green-400 focus:ring-green-400"
-                          data-testid="input-suction-mod"
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label htmlFor="conductivity-mod" className="text-sm font-medium flex items-center justify-between">
-                          <span>Conductivity (Ks)</span>
-                          <span className="text-xs text-muted-foreground font-mono">in/hr</span>
-                        </Label>
-                        <Input
-                          id="conductivity-mod"
-                          type="number"
-                          step="0.01"
-                          value={modifiedParams.conductivity}
-                          onChange={(e) => setModifiedParams({ ...modifiedParams, conductivity: parseFloat(e.target.value) || 0 })}
-                          className="font-mono border-green-200 focus:border-green-400 focus:ring-green-400"
-                          data-testid="input-conductivity-mod"
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label htmlFor="deficit-mod" className="text-sm font-medium flex items-center justify-between">
-                          <span>Initial Deficit (θd)</span>
-                          <span className="text-xs text-muted-foreground font-mono">fraction</span>
-                        </Label>
-                        <Input
-                          id="deficit-mod"
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          max="1"
-                          value={modifiedParams.initialDeficit}
-                          onChange={(e) => setModifiedParams({ ...modifiedParams, initialDeficit: parseFloat(e.target.value) || 0 })}
-                          className="font-mono border-green-200 focus:border-green-400 focus:ring-green-400"
-                          data-testid="input-deficit-mod"
-                        />
-                      </div>
-
-                      <div className="pt-3 border-t border-green-100">
-                        <p className="text-xs font-medium text-green-700 mb-3">Redistribution Parameters</p>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label htmlFor="saturated-mod" className="text-sm font-medium flex items-center justify-between">
-                          <span>Saturated Content (θs)</span>
-                          <span className="text-xs text-muted-foreground font-mono">fraction</span>
-                        </Label>
-                        <Input
-                          id="saturated-mod"
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          max="1"
-                          value={modifiedParams.saturatedContent}
-                          onChange={(e) => setModifiedParams({ ...modifiedParams, saturatedContent: parseFloat(e.target.value) || 0 })}
-                          className="font-mono border-green-200 focus:border-green-400 focus:ring-green-400"
-                          data-testid="input-saturated-mod"
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label htmlFor="fieldcap-mod" className="text-sm font-medium flex items-center justify-between">
-                          <span>Field Capacity (θfc)</span>
-                          <span className="text-xs text-muted-foreground font-mono">fraction</span>
-                        </Label>
-                        <Input
-                          id="fieldcap-mod"
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          max="1"
-                          value={modifiedParams.fieldCapacity}
-                          onChange={(e) => setModifiedParams({ ...modifiedParams, fieldCapacity: parseFloat(e.target.value) || 0 })}
-                          className="font-mono border-green-200 focus:border-green-400 focus:ring-green-400"
-                          data-testid="input-fieldcap-mod"
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label htmlFor="redisttime-mod" className="text-sm font-medium flex items-center justify-between">
-                          <span>Redistribution Time</span>
-                          <span className="text-xs text-muted-foreground font-mono">hours</span>
-                        </Label>
-                        <Input
-                          id="redisttime-mod"
-                          type="number"
-                          step="0.5"
-                          min="0.1"
-                          value={modifiedParams.redistributionTime}
-                          onChange={(e) => setModifiedParams({ ...modifiedParams, redistributionTime: parseFloat(e.target.value) || 4 })}
-                          className="font-mono border-green-200 focus:border-green-400 focus:ring-green-400"
-                          data-testid="input-redisttime-mod"
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label htmlFor="duration-mod" className="text-sm font-medium flex items-center justify-between">
-                          <span>Duration</span>
-                          <span className="text-xs text-muted-foreground font-mono">hours</span>
-                        </Label>
-                        <Input
-                          id="duration-mod"
-                          type="number"
-                          step="1"
-                          min="1"
-                          max="24"
-                          value={duration}
-                          onChange={(e) => setDuration(parseFloat(e.target.value) || 6)}
-                          className="font-mono border-green-200 focus:border-green-400 focus:ring-green-400"
-                          data-testid="input-duration-mod"
-                        />
-                      </div>
-
-                      <div className="pt-3 border-t border-green-100">
-                        <Label className="text-sm font-medium mb-3 block">Soil Presets</Label>
-                        <div className="grid grid-cols-2 gap-2">
-                          {Object.keys(soilPresets).map((soil) => (
-                            <button
-                              key={soil}
-                              onClick={() => applyPreset(soil as keyof typeof soilPresets)}
-                              className="px-3 py-2 text-xs font-medium rounded-lg bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 transition-colors capitalize"
-                              data-testid={`preset-mod-${soil}`}
-                            >
-                              {soil.replace(/([A-Z])/g, ' $1').trim()}
-                            </button>
-                          ))}
+                  <div className="lg:col-span-1 space-y-6">
+                    <Card className="border-green-200/60 shadow-lg shadow-green-500/5">
+                      <CardHeader className="pb-4">
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                          <Calculator className="w-5 h-5 text-green-600" />
+                          Parameters
+                        </CardTitle>
+                        <CardDescription>Green-Ampt with redistribution</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="suction-mod" className="text-sm font-medium flex items-center justify-between">
+                            <span>Suction Head (ψ)</span>
+                            <span className="text-xs text-muted-foreground font-mono">in</span>
+                          </Label>
+                          <Input
+                            id="suction-mod"
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            value={modifiedParams.suctionHead}
+                            onChange={(e) => setModifiedParams({ ...modifiedParams, suctionHead: Math.max(0, parseFloat(e.target.value) || 0) })}
+                            className="font-mono border-green-200 focus:border-green-400 focus:ring-green-400"
+                            data-testid="input-suction-mod"
+                          />
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="conductivity-mod" className="text-sm font-medium flex items-center justify-between">
+                            <span>Conductivity (Ks)</span>
+                            <span className="text-xs text-muted-foreground font-mono">in/hr</span>
+                          </Label>
+                          <Input
+                            id="conductivity-mod"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={modifiedParams.conductivity}
+                            onChange={(e) => setModifiedParams({ ...modifiedParams, conductivity: Math.max(0, parseFloat(e.target.value) || 0) })}
+                            className="font-mono border-green-200 focus:border-green-400 focus:ring-green-400"
+                            data-testid="input-conductivity-mod"
+                          />
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="deficit-mod" className="text-sm font-medium flex items-center justify-between">
+                            <span>Initial Deficit (θd)</span>
+                            <span className="text-xs text-muted-foreground font-mono">fraction</span>
+                          </Label>
+                          <Input
+                            id="deficit-mod"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="1"
+                            value={modifiedParams.initialDeficit}
+                            onChange={(e) => setModifiedParams({ ...modifiedParams, initialDeficit: Math.min(1, Math.max(0, parseFloat(e.target.value) || 0)) })}
+                            className="font-mono border-green-200 focus:border-green-400 focus:ring-green-400"
+                            data-testid="input-deficit-mod"
+                          />
+                        </div>
 
-                  <Card className="lg:col-span-2 border-green-200/60 shadow-lg shadow-green-500/5">
-                    <CardHeader className="pb-4">
-                      <CardTitle className="text-lg">Infiltration & Moisture Redistribution</CardTitle>
-                      <CardDescription>Modified Green-Ampt with soil moisture recovery</CardDescription>
+                        <div className="pt-3 border-t border-green-100">
+                          <p className="text-xs font-medium text-green-700 mb-3">Redistribution Parameters</p>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="saturated-mod" className="text-sm font-medium flex items-center justify-between">
+                            <span>Saturated Content (θs)</span>
+                            <span className="text-xs text-muted-foreground font-mono">fraction</span>
+                          </Label>
+                          <Input
+                            id="saturated-mod"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="1"
+                            value={modifiedParams.saturatedContent}
+                            onChange={(e) => setModifiedParams({ ...modifiedParams, saturatedContent: Math.min(1, Math.max(0, parseFloat(e.target.value) || 0)) })}
+                            className="font-mono border-green-200 focus:border-green-400 focus:ring-green-400"
+                            data-testid="input-saturated-mod"
+                          />
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="fieldcap-mod" className="text-sm font-medium flex items-center justify-between">
+                            <span>Field Capacity (θfc)</span>
+                            <span className="text-xs text-muted-foreground font-mono">fraction</span>
+                          </Label>
+                          <Input
+                            id="fieldcap-mod"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="1"
+                            value={modifiedParams.fieldCapacity}
+                            onChange={(e) => setModifiedParams({ ...modifiedParams, fieldCapacity: Math.min(1, Math.max(0, parseFloat(e.target.value) || 0)) })}
+                            className="font-mono border-green-200 focus:border-green-400 focus:ring-green-400"
+                            data-testid="input-fieldcap-mod"
+                          />
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="redisttime-mod" className="text-sm font-medium flex items-center justify-between">
+                            <span>Redistribution Time</span>
+                            <span className="text-xs text-muted-foreground font-mono">hours</span>
+                          </Label>
+                          <Input
+                            id="redisttime-mod"
+                            type="number"
+                            step="0.5"
+                            min="0.1"
+                            value={modifiedParams.redistributionTime}
+                            onChange={(e) => setModifiedParams({ ...modifiedParams, redistributionTime: Math.max(0.1, parseFloat(e.target.value) || 4) })}
+                            className="font-mono border-green-200 focus:border-green-400 focus:ring-green-400"
+                            data-testid="input-redisttime-mod"
+                          />
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="duration-mod" className="text-sm font-medium flex items-center justify-between">
+                            <span>Duration</span>
+                            <span className="text-xs text-muted-foreground font-mono">hours</span>
+                          </Label>
+                          <Input
+                            id="duration-mod"
+                            type="number"
+                            step="1"
+                            min="1"
+                            max="24"
+                            value={duration}
+                            onChange={(e) => setDuration(Math.min(24, Math.max(1, parseFloat(e.target.value) || 6)))}
+                            className="font-mono border-green-200 focus:border-green-400 focus:ring-green-400"
+                            data-testid="input-duration-mod"
+                          />
+                        </div>
+
+                        <div className="pt-3 border-t border-green-100">
+                          <Label className="text-sm font-medium mb-3 block">Soil Presets</Label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {Object.keys(soilPresets).map((soil) => (
+                              <button
+                                key={soil}
+                                onClick={() => applyPreset(soil as keyof typeof soilPresets)}
+                                className="px-3 py-2 text-xs font-medium rounded-lg bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 transition-colors capitalize"
+                                data-testid={`preset-mod-${soil}`}
+                              >
+                                {soil.replace(/([A-Z])/g, ' $1').trim()}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-green-200/60 shadow-lg shadow-green-500/5">
+                      <CardHeader className="pb-4">
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                          <BookOpen className="w-5 h-5 text-green-600" />
+                          Modified Parameters
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ScrollArea className="h-[200px]">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-[100px]">Parameter</TableHead>
+                                <TableHead>Description & Units</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              <TableRow>
+                                <TableCell className="font-mono font-medium">θs</TableCell>
+                                <TableCell className="text-xs text-gray-600">
+                                  <strong>Saturated Content (fraction)</strong><br/>
+                                  Total porosity of the soil.
+                                </TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell className="font-mono font-medium">θfc</TableCell>
+                                <TableCell className="text-xs text-gray-600">
+                                  <strong>Field Capacity (fraction)</strong><br/>
+                                  Moisture content after gravity drainage has ceased.
+                                </TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell className="font-mono font-medium">T</TableCell>
+                                <TableCell className="text-xs text-gray-600">
+                                  <strong>Redistribution Time (hours)</strong><br/>
+                                  Time constant for soil moisture recovery.
+                                </TableCell>
+                              </TableRow>
+                            </TableBody>
+                          </Table>
+                        </ScrollArea>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <Card className="lg:col-span-2 border-green-200/60 shadow-lg shadow-green-500/5 flex flex-col">
+                    <CardHeader className="pb-4 flex flex-row items-center justify-between space-y-0">
+                      <div>
+                        <CardTitle className="text-lg">Infiltration & Moisture Redistribution</CardTitle>
+                        <CardDescription>Modified Green-Ampt with soil moisture recovery</CardDescription>
+                      </div>
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" size="sm" className="gap-2 text-green-700 border-green-200 hover:bg-green-50">
+                            <TableIcon className="w-4 h-4" />
+                            View Data
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+                          <DialogHeader>
+                            <DialogTitle>Infiltration & Redistribution Data</DialogTitle>
+                            <DialogDescription>
+                              Detailed time-step data including soil moisture content.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="flex-1 overflow-auto border rounded-md">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Time (hr)</TableHead>
+                                  <TableHead>Infiltration Rate (in/hr)</TableHead>
+                                  <TableHead>Cumulative Infiltration (in)</TableHead>
+                                  <TableHead>Moisture Content (θ)</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {modifiedData.map((row, i) => (
+                                  <TableRow key={i}>
+                                    <TableCell>{row.time}</TableCell>
+                                    <TableCell>{row.infiltrationRate}</TableCell>
+                                    <TableCell>{row.cumulativeInfiltration}</TableCell>
+                                    <TableCell>{row.moistureContent}</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                          <div className="flex justify-end pt-4">
+                            <Button onClick={() => copyToClipboard(modifiedData)} className="gap-2 bg-green-600 hover:bg-green-700">
+                              <Download className="w-4 h-4" />
+                              Copy to CSV
+                            </Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
                     </CardHeader>
-                    <CardContent>
-                      <div className="h-80">
+                    <CardContent className="flex-1 flex flex-col">
+                      <div className="flex-1 min-h-[300px]">
                         <ResponsiveContainer width="100%" height="100%">
                           <LineChart data={modifiedData.filter((_, i) => i % 5 === 0)} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -633,43 +838,6 @@ export default function GreenAmptPage() {
                     </CardContent>
                   </Card>
                 </div>
-
-                <Card className="border-green-200/60 shadow-lg shadow-green-500/5">
-                  <CardHeader className="pb-4">
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <Info className="w-5 h-5 text-green-600" />
-                      About Modified Green-Ampt Method
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="prose prose-sm prose-green max-w-none">
-                      <p className="text-gray-600 leading-relaxed">
-                        The <strong>Modified Green-Ampt</strong> method (also called Green-Ampt with Redistribution) 
-                        extends the standard model to account for soil moisture redistribution during dry periods 
-                        between rainfall events. This allows for more accurate simulation of multi-event storms 
-                        where the soil partially recovers its infiltration capacity.
-                      </p>
-                      <div className="mt-4 grid md:grid-cols-2 gap-4">
-                        <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                          <p className="font-medium text-green-800 mb-2">Additional Parameters:</p>
-                          <ul className="text-sm text-green-700 space-y-1">
-                            <li><strong>θs</strong> - Saturated moisture content (porosity)</li>
-                            <li><strong>θfc</strong> - Field capacity moisture content</li>
-                            <li><strong>Redistribution Time</strong> - Recovery time constant</li>
-                          </ul>
-                        </div>
-                        <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
-                          <p className="font-medium text-emerald-800 mb-2">Key Differences:</p>
-                          <ul className="text-sm text-emerald-700 space-y-1">
-                            <li>Tracks soil moisture content over time</li>
-                            <li>Models moisture redistribution between events</li>
-                            <li>Better for long-term continuous simulation</li>
-                          </ul>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
               </motion.div>
             </TabsContent>
           </AnimatePresence>
