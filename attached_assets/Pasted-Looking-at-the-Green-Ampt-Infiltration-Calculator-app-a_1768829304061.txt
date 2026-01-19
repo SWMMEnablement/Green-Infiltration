@@ -1,0 +1,45 @@
+Looking at the **Green-Ampt Infiltration Calculator** app again, I can see the core functionality is in place, but several areas could be significantly improved for usability, accuracy, and practicality. Here are my key observations and suggestions for enhancement.
+
+### **Current Notable Issues & Suggested Improvements**
+
+1.  **Graph is Unreadable Without Context**
+    *   **Issue:** The main "Infiltration Curve" graph has **no labeled X or Y axes**. The Y-axis appears to be infiltration rate (in/hr), and the X-axis is likely time (hours), but this is not stated, making the graph difficult to interpret.
+    *   **Suggestion:** **Add clear axis labels ("Time (hours)" and "Infiltration Rate (in/hr)") and a grid or scale** to allow users to read values directly from the chart.
+
+2.  **Unrealistic Default Example & Parameter Logic**
+    *   **Issue:** The default`Duration` is set to **400 hours** (over 16 days), leading to a massive "Total Infiltration" of ~144 inches. The "Initial Rate" shown (e.g., 1420 in/hr) is physically impossible for soil, suggesting a calculation or display error with the first time step.
+    *   **Suggestion:**
+        *   Change the default duration to a more standard storm length (e.g., **6 or 24 hours**).
+        *   **Review the initial rate calculation.** The Green-Ampt rate at time zero is theoretically infinite; the first calculated rate should be high but within a plausible range for the given conductivity (Ks).
+        *   Add an **example or "demo" button** that loads parameters for a common scenario (e.g., "1-hour storm on sandy loam").
+
+3.  **"Soil Presets" Feature is Not Functional**
+    *   **Issue:** Clicking soil type buttons ("sand," "loam," etc.) changes the text but **does not auto-populate** the`Suction Head (ψ)`,`Conductivity (Ks)`, and`Initial Deficit (θd)` fields with standard values. This is the expected behavior for such a feature but it's currently missing.
+    *   **Suggestion:** Link each soil button to a set of pre-defined, literature-based parameter values that automatically update the input fields when selected.
+
+4.  **Missing Core Input: Rainfall**
+    *   **Issue:** The app only calculates **potential infiltration capacity**. For real-world analysis, users need to compare this to an actual storm to see when runoff begins (when rainfall rate > infiltration rate).
+    *   **Suggestion:** **Add a "Rainfall" input section.** This could be a simple constant intensity (in/hr) or, more advanced, a time series. The output should then show actual infiltration, runoff generated, and the time to ponding.
+
+5.  **Underutilized Model Comparison**
+    *   **Issue:** The sidebar lists other methods (Horton, Modified Green-Ampt, SCS), but they are just descriptions.
+    *   **Suggestion:** Make this a powerful feature by allowing users to **select a second method, input its required parameters, and plot both infiltration curves on the same graph** for comparison.
+
+6.  **UI/UX Polish and Clarity**
+    *   **Parameter Explanation:** Add **tooltips (?) or brief help text** next to each parameter (ψ, Ks, θd) listing common ranges or definitions.
+    *   **"Save Current" Feature:** This button exists but its functionality is unclear. If it's for saving parameter sets, implement it fully with a named list.
+    *   **Results Summary:** The text ("After 6 hours...") is helpful. Ensure this dynamically updates. Consider adding a clear **runoff volume** result if rainfall is added.
+    *   **Mobile Responsiveness:** Check the layout on different screen sizes. The graph and input panels may need stacking on narrow screens.
+
+### **Quick Wins (Highest Impact)**
+1.  **Fix the Soil Presets** to auto-fill parameters.
+2.  **Add labels and a grid** to the graph.
+3.  **Adjust the default duration** to 24 hours and **review the initial rate calculation**.
+4.  **Add a simple constant rainfall intensity input** field.
+
+### **Advanced Potential Features**
+*   Allow input of a **design storm hyetograph** (variable rainfall over time).
+*   Implement the **Modified Green-Ampt (Redistribution)** model from the tab as a selectable option that accounts for recovery between storms.
+*   Add data **export functionality** (CSV download for the curve, image export for the graph).
+
+The app has a solid foundation with the live-updating graph and clear core equation. Focusing on these improvements will make it an excellent, practical tool for students and engineers in hydrology.

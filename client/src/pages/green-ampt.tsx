@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, Fragment } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -132,6 +132,7 @@ interface GreenAmptParams extends BaseParams {
   suctionHead: number;
   conductivity: number;
   initialDeficit: number;
+  rainfallRate: number;
 }
 
 interface ModifiedGreenAmptParams extends BaseParams {
@@ -142,6 +143,7 @@ interface ModifiedGreenAmptParams extends BaseParams {
   saturatedContent: number;
   fieldCapacity: number;
   redistributionTime: number;
+  rainfallRate: number;
 }
 
 interface HortonParams extends BaseParams {
@@ -209,36 +211,85 @@ const methodLabels = {
   curveNumber: "SCS Curve Number"
 };
 
-function calculateInfiltration(params: ScenarioParams, timestep: number = 0.1): { time: number; infiltrationRate: number; cumulativeInfiltration: number }[] {
-  const data: { time: number; infiltrationRate: number; cumulativeInfiltration: number }[] = [];
+interface InfiltrationDataPoint {
+  time: number;
+  infiltrationRate: number;
+  actualInfiltrationRate: number;
+  cumulativeInfiltration: number;
+  runoff?: number;
+  cumulativeRunoff?: number;
+}
+
+interface InfiltrationResult {
+  data: InfiltrationDataPoint[];
+  timeToPonding?: number;
+  totalRunoff: number;
+}
+
+function calculateInfiltration(params: ScenarioParams, timestep: number = 0.1): InfiltrationResult {
+  const data: InfiltrationDataPoint[] = [];
+  let totalRunoff = 0;
+  let timeToPonding: number | undefined;
   
   if (params.method === "greenAmpt") {
     let F = 0.001;
     let time = 0;
+    let cumulativeRunoff = 0;
+    const rainfall = params.rainfallRate;
     while (time <= params.duration) {
-      const f = params.conductivity * (1 + (params.suctionHead * params.initialDeficit) / F);
-      data.push({ time: parseFloat(time.toFixed(2)), infiltrationRate: parseFloat(f.toFixed(4)), cumulativeInfiltration: parseFloat(F.toFixed(4)) });
-      F += f * timestep;
+      const potentialRate = params.conductivity * (1 + (params.suctionHead * params.initialDeficit) / F);
+      const actualRate = rainfall > 0 ? Math.min(potentialRate, rainfall) : potentialRate;
+      const runoffRate = rainfall > 0 ? Math.max(0, rainfall - potentialRate) : 0;
+      F += actualRate * timestep;
+      cumulativeRunoff += runoffRate * timestep;
+      if (timeToPonding === undefined && rainfall > 0 && rainfall > potentialRate) {
+        timeToPonding = time;
+      }
+      data.push({ 
+        time: parseFloat(time.toFixed(2)), 
+        infiltrationRate: parseFloat(potentialRate.toFixed(4)), 
+        actualInfiltrationRate: parseFloat(actualRate.toFixed(4)),
+        cumulativeInfiltration: parseFloat(F.toFixed(4)),
+        runoff: parseFloat(runoffRate.toFixed(4)),
+        cumulativeRunoff: parseFloat(cumulativeRunoff.toFixed(4))
+      });
       time += timestep;
     }
+    totalRunoff = cumulativeRunoff;
   } else if (params.method === "modifiedGreenAmpt") {
     let F = 0.001;
     let time = 0;
+    let cumulativeRunoff = 0;
+    const rainfall = params.rainfallRate;
     while (time <= params.duration) {
       const redistributionFactor = Math.exp(-time / Math.max(params.redistributionTime, 0.1));
       const effectiveDeficit = params.initialDeficit * (1 - redistributionFactor * 0.3);
-      const f = params.conductivity * (1 + (params.suctionHead * effectiveDeficit) / F);
-      data.push({ time: parseFloat(time.toFixed(2)), infiltrationRate: parseFloat(f.toFixed(4)), cumulativeInfiltration: parseFloat(F.toFixed(4)) });
-      F += f * timestep;
+      const potentialRate = params.conductivity * (1 + (params.suctionHead * effectiveDeficit) / F);
+      const actualRate = rainfall > 0 ? Math.min(potentialRate, rainfall) : potentialRate;
+      const runoffRate = rainfall > 0 ? Math.max(0, rainfall - potentialRate) : 0;
+      cumulativeRunoff += runoffRate * timestep;
+      if (timeToPonding === undefined && rainfall > 0 && rainfall > potentialRate) {
+        timeToPonding = time;
+      }
+      data.push({ 
+        time: parseFloat(time.toFixed(2)), 
+        infiltrationRate: parseFloat(potentialRate.toFixed(4)), 
+        actualInfiltrationRate: parseFloat(actualRate.toFixed(4)),
+        cumulativeInfiltration: parseFloat(F.toFixed(4)),
+        runoff: parseFloat(runoffRate.toFixed(4)),
+        cumulativeRunoff: parseFloat(cumulativeRunoff.toFixed(4))
+      });
+      F += actualRate * timestep;
       time += timestep;
     }
+    totalRunoff = cumulativeRunoff;
   } else if (params.method === "horton") {
     let F = 0;
     let time = 0;
     while (time <= params.duration) {
       const f = params.minRate + (params.maxRate - params.minRate) * Math.exp(-params.decayConstant * time);
       F += f * timestep;
-      data.push({ time: parseFloat(time.toFixed(2)), infiltrationRate: parseFloat(f.toFixed(4)), cumulativeInfiltration: parseFloat(F.toFixed(4)) });
+      data.push({ time: parseFloat(time.toFixed(2)), infiltrationRate: parseFloat(f.toFixed(4)), actualInfiltrationRate: parseFloat(f.toFixed(4)), cumulativeInfiltration: parseFloat(F.toFixed(4)), runoff: 0, cumulativeRunoff: 0 });
       time += timestep;
     }
   } else if (params.method === "curveNumber") {
@@ -246,6 +297,7 @@ function calculateInfiltration(params: ScenarioParams, timestep: number = 0.1): 
     const Ia = params.initialAbstraction * S;
     let time = 0;
     let prevInfiltration = 0;
+    let cumulativeRunoff = 0;
     while (time <= params.duration) {
       const P = (params.rainfall / params.duration) * time;
       let Q = 0;
@@ -255,21 +307,23 @@ function calculateInfiltration(params: ScenarioParams, timestep: number = 0.1): 
       const infiltration = P - Q;
       const deltaF = infiltration - prevInfiltration;
       const rate = deltaF / timestep;
-      data.push({ time: parseFloat(time.toFixed(2)), infiltrationRate: parseFloat(Math.max(0, rate).toFixed(4)), cumulativeInfiltration: parseFloat(infiltration.toFixed(4)) });
+      cumulativeRunoff = Q;
+      data.push({ time: parseFloat(time.toFixed(2)), infiltrationRate: parseFloat(Math.max(0, rate).toFixed(4)), actualInfiltrationRate: parseFloat(Math.max(0, rate).toFixed(4)), cumulativeInfiltration: parseFloat(infiltration.toFixed(4)), runoff: 0, cumulativeRunoff: parseFloat(Q.toFixed(4)) });
       prevInfiltration = infiltration;
       time += timestep;
     }
+    totalRunoff = cumulativeRunoff;
   }
   
-  return data;
+  return { data, timeToPonding, totalRunoff };
 }
 
 function getDefaultParams(method: InfiltrationMethod): ScenarioParams {
   switch (method) {
     case "greenAmpt":
-      return { name: "Green-Ampt", method: "greenAmpt", duration: 6, suctionHead: 11.01, conductivity: 0.43, initialDeficit: 0.30 };
+      return { name: "Green-Ampt", method: "greenAmpt", duration: 6, suctionHead: 11.01, conductivity: 0.43, initialDeficit: 0.30, rainfallRate: 2.0 };
     case "modifiedGreenAmpt":
-      return { name: "Modified G-A", method: "modifiedGreenAmpt", duration: 6, suctionHead: 11.01, conductivity: 0.43, initialDeficit: 0.30, saturatedContent: 0.453, fieldCapacity: 0.18, redistributionTime: 4.0 };
+      return { name: "Modified G-A", method: "modifiedGreenAmpt", duration: 6, suctionHead: 11.01, conductivity: 0.43, initialDeficit: 0.30, saturatedContent: 0.453, fieldCapacity: 0.18, redistributionTime: 4.0, rainfallRate: 2.0 };
     case "horton":
       return { name: "Horton", method: "horton", duration: 6, maxRate: 3.0, minRate: 0.5, decayConstant: 2.0 };
     case "curveNumber":
@@ -376,33 +430,88 @@ export default function GreenAmptPage() {
     toast({ title: "Applied", description: `${soilType.replace(/([A-Z])/g, ' $1')} soil values loaded.` });
   };
 
-  const calculatedData = useMemo(() => {
+  const calculatedResults = useMemo(() => {
     return scenarios.map(params => calculateInfiltration(params));
   }, [scenarios]);
 
   const chartData = useMemo(() => {
     if (!comparisonMode) {
-      return calculatedData[activeScenarioIndex]?.filter((_, i) => i % 5 === 0) || [];
+      return calculatedResults[activeScenarioIndex]?.data.filter((_, i) => i % 5 === 0) || [];
     }
-    const maxLength = Math.max(...calculatedData.map(d => d.length));
+    const maxLength = Math.max(...calculatedResults.map(r => r.data.length));
     const combined: any[] = [];
     for (let i = 0; i < maxLength; i += 5) {
-      const point: any = { time: calculatedData[0]?.[i]?.time || i * 0.1 };
+      let time = i * 0.1;
+      for (let idx = 0; idx < calculatedResults.length; idx++) {
+        if (calculatedResults[idx]?.data[i]?.time !== undefined) {
+          time = calculatedResults[idx].data[i].time;
+          break;
+        }
+      }
+      const point: any = { time };
       scenarios.forEach((s, idx) => {
-        const data = calculatedData[idx]?.[i];
-        if (data) {
-          point[`rate_${idx}`] = data.infiltrationRate;
+        const dataPoint = calculatedResults[idx]?.data[i];
+        if (dataPoint) {
+          point[`capacity_${idx}`] = dataPoint.infiltrationRate;
+          point[`actual_${idx}`] = dataPoint.actualInfiltrationRate;
         }
       });
       combined.push(point);
     }
     return combined;
-  }, [calculatedData, comparisonMode, activeScenarioIndex, scenarios]);
+  }, [calculatedResults, comparisonMode, activeScenarioIndex, scenarios]);
 
-  const copyToClipboard = (data: any[]) => {
-    const headers = Object.keys(data[0]).join(",");
-    const rows = data.map(row => Object.values(row).join(","));
-    const csv = [headers, ...rows].join("\n");
+  const copyToClipboard = () => {
+    const headerParts = ["Time"];
+    scenarios.forEach(s => {
+      const scenarioHasRainfall = (s.method === "greenAmpt" || s.method === "modifiedGreenAmpt") && s.rainfallRate > 0;
+      if (scenarioHasRainfall) {
+        headerParts.push(`${s.name} Capacity`, `${s.name} Actual`);
+      } else {
+        headerParts.push(`${s.name} Rate`);
+      }
+    });
+    scenarios.forEach(s => headerParts.push(`${s.name} Cumulative`));
+    
+    const maxLength = Math.max(...calculatedResults.map(r => r.data.length));
+    const rows: string[] = [];
+    for (let i = 0; i < maxLength; i++) {
+      const rowParts: (number | string)[] = [];
+      let timeValue = 0;
+      for (let idx = 0; idx < scenarios.length; idx++) {
+        if (calculatedResults[idx]?.data[i]?.time !== undefined) {
+          timeValue = calculatedResults[idx].data[i].time;
+          break;
+        }
+      }
+      rowParts.push(timeValue);
+      
+      scenarios.forEach((s, idx) => {
+        const scenarioHasRainfall = (s.method === "greenAmpt" || s.method === "modifiedGreenAmpt") && s.rainfallRate > 0;
+        const dataPoint = calculatedResults[idx]?.data[i];
+        const capacity = dataPoint ? (units === "imperial" 
+          ? dataPoint.infiltrationRate
+          : dataPoint.infiltrationRate * 25.4) : "";
+        const actual = dataPoint ? (units === "imperial" 
+          ? dataPoint.actualInfiltrationRate
+          : dataPoint.actualInfiltrationRate * 25.4) : "";
+        if (scenarioHasRainfall) {
+          rowParts.push(capacity, actual);
+        } else {
+          rowParts.push(capacity);
+        }
+      });
+      scenarios.forEach((_, idx) => {
+        const dataPoint = calculatedResults[idx]?.data[i];
+        const cumulative = dataPoint ? (units === "imperial"
+          ? dataPoint.cumulativeInfiltration
+          : dataPoint.cumulativeInfiltration * 25.4) : "";
+        rowParts.push(cumulative);
+      });
+      rows.push(rowParts.join(","));
+    }
+    
+    const csv = [headerParts.join(","), ...rows].join("\n");
     navigator.clipboard.writeText(csv);
     toast({ title: "Copied", description: "Data copied in CSV format." });
   };
@@ -446,15 +555,32 @@ export default function GreenAmptPage() {
     return warnings;
   };
 
-  const generateSummaryStatement = (data: typeof currentData, params: ScenarioParams): string => {
+  const generateSummaryStatement = (data: typeof currentData, params: ScenarioParams, result: InfiltrationResult | undefined): string => {
     if (!data.length) return "";
     const conversionFactor = units === "imperial" ? 1 : 25.4;
-    const initial = (data[0]?.infiltrationRate || 0) * conversionFactor;
-    const final = (data[data.length - 1]?.infiltrationRate || 0) * conversionFactor;
+    const initial = (data[0]?.actualInfiltrationRate || 0) * conversionFactor;
+    const final = (data[data.length - 1]?.actualInfiltrationRate || 0) * conversionFactor;
     const total = (data[data.length - 1]?.cumulativeInfiltration || 0) * conversionFactor;
     const unitLabel = units === "imperial" ? "inches" : "mm";
     const rateLabel = units === "imperial" ? "in/hr" : "mm/hr";
-    return `After ${params.duration} hours, approximately ${total.toFixed(2)} ${unitLabel} of water will infiltrate. The rate decreases from ${initial.toFixed(2)} to ${final.toFixed(2)} ${rateLabel}.`;
+    
+    let summary = `After ${params.duration} hours, approximately ${total.toFixed(2)} ${unitLabel} of water will infiltrate. The actual rate decreases from ${initial.toFixed(2)} to ${final.toFixed(2)} ${rateLabel}.`;
+    
+    if ((params.method === "greenAmpt" || params.method === "modifiedGreenAmpt") && params.rainfallRate > 0) {
+      const rainfallDisplay = params.rainfallRate * conversionFactor;
+      summary += ` Under ${rainfallDisplay.toFixed(2)} ${rateLabel} rainfall:`;
+      
+      if (result?.totalRunoff && result.totalRunoff > 0) {
+        const runoff = result.totalRunoff * conversionFactor;
+        summary += ` runoff = ${runoff.toFixed(2)} ${unitLabel}.`;
+        if (result.timeToPonding !== undefined) {
+          summary += ` Ponding begins at ${result.timeToPonding.toFixed(2)} hours.`;
+        }
+      } else {
+        summary += ` all rainfall infiltrates (no runoff).`;
+      }
+    }
+    return summary;
   };
 
   const ParameterTooltip = ({ helpKey }: { helpKey: keyof typeof parameterHelp }) => {
@@ -488,7 +614,9 @@ export default function GreenAmptPage() {
   };
 
   const current = scenarios[activeScenarioIndex];
-  const currentData = calculatedData[activeScenarioIndex] || [];
+  const currentResult = calculatedResults[activeScenarioIndex];
+  const currentData = currentResult?.data || [];
+  const hasRainfall = (current.method === "greenAmpt" || current.method === "modifiedGreenAmpt") && current.rainfallRate > 0;
 
   const renderParameterInputs = () => {
     const params = scenarios[activeScenarioIndex];
@@ -543,6 +671,22 @@ export default function GreenAmptPage() {
               className="font-mono border-green-200"
               data-testid="input-deficit"
             />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-sm font-medium flex items-center justify-between">
+              <span>Rainfall Intensity</span>
+              <span className="text-xs text-muted-foreground font-mono">{rateUnit}</span>
+            </Label>
+            <Input
+              type="number"
+              step="0.1"
+              min="0"
+              value={params.rainfallRate}
+              onChange={(e) => updateScenario(activeScenarioIndex, { rainfallRate: Math.max(0, parseFloat(e.target.value) || 0) })}
+              className="font-mono border-blue-200"
+              data-testid="input-rainfall-rate"
+            />
+            <p className="text-xs text-muted-foreground">Set to 0 for potential infiltration only (no runoff calculation)</p>
           </div>
           {params.method === "modifiedGreenAmpt" && (
             <>
@@ -1006,31 +1150,48 @@ export default function GreenAmptPage() {
                         <TableHeader>
                           <TableRow>
                             <TableHead>Time ({getUnitLabel("time", units)})</TableHead>
-                            {scenarios.map((s, idx) => (
-                              <TableHead key={idx}>{s.name} Rate ({getUnitLabel("rate", units)})</TableHead>
-                            ))}
+                            {scenarios.map((s, idx) => {
+                              const scenarioHasRainfall = (s.method === "greenAmpt" || s.method === "modifiedGreenAmpt") && s.rainfallRate > 0;
+                              return scenarioHasRainfall ? (
+                                <Fragment key={idx}>
+                                  <TableHead>{s.name} Capacity ({getUnitLabel("rate", units)})</TableHead>
+                                  <TableHead>{s.name} Actual ({getUnitLabel("rate", units)})</TableHead>
+                                </Fragment>
+                              ) : (
+                                <TableHead key={idx}>{s.name} Rate ({getUnitLabel("rate", units)})</TableHead>
+                              );
+                            })}
                             {scenarios.map((s, idx) => (
                               <TableHead key={`cum-${idx}`}>{s.name} Cumulative ({getUnitLabel("length", units)})</TableHead>
                             ))}
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {(calculatedData[0] || []).map((_, i) => (
+                          {(calculatedResults[0]?.data || []).map((_, i) => (
                             <TableRow key={i}>
-                              <TableCell>{calculatedData[0]?.[i]?.time}</TableCell>
-                              {scenarios.map((_, idx) => (
-                                <TableCell key={idx}>
-                                  {units === "imperial" 
-                                    ? calculatedData[idx]?.[i]?.infiltrationRate.toFixed(4)
-                                    : (calculatedData[idx]?.[i]?.infiltrationRate * 25.4).toFixed(4)
-                                  }
-                                </TableCell>
-                              ))}
+                              <TableCell>{calculatedResults[0]?.data[i]?.time}</TableCell>
+                              {scenarios.map((s, idx) => {
+                                const scenarioHasRainfall = (s.method === "greenAmpt" || s.method === "modifiedGreenAmpt") && s.rainfallRate > 0;
+                                const capacity = units === "imperial" 
+                                  ? calculatedResults[idx]?.data[i]?.infiltrationRate.toFixed(4)
+                                  : ((calculatedResults[idx]?.data[i]?.infiltrationRate || 0) * 25.4).toFixed(4);
+                                const actual = units === "imperial" 
+                                  ? calculatedResults[idx]?.data[i]?.actualInfiltrationRate.toFixed(4)
+                                  : ((calculatedResults[idx]?.data[i]?.actualInfiltrationRate || 0) * 25.4).toFixed(4);
+                                return scenarioHasRainfall ? (
+                                  <Fragment key={idx}>
+                                    <TableCell>{capacity}</TableCell>
+                                    <TableCell>{actual}</TableCell>
+                                  </Fragment>
+                                ) : (
+                                  <TableCell key={idx}>{capacity}</TableCell>
+                                );
+                              })}
                               {scenarios.map((_, idx) => (
                                 <TableCell key={`cum-${idx}`}>
                                   {units === "imperial"
-                                    ? calculatedData[idx]?.[i]?.cumulativeInfiltration.toFixed(4)
-                                    : (calculatedData[idx]?.[i]?.cumulativeInfiltration * 25.4).toFixed(4)
+                                    ? calculatedResults[idx]?.data[i]?.cumulativeInfiltration.toFixed(4)
+                                    : ((calculatedResults[idx]?.data[i]?.cumulativeInfiltration || 0) * 25.4).toFixed(4)
                                   }
                                 </TableCell>
                               ))}
@@ -1040,7 +1201,7 @@ export default function GreenAmptPage() {
                       </Table>
                     </div>
                     <div className="flex justify-end pt-4">
-                      <Button onClick={() => copyToClipboard(calculatedData[0] || [])} className="gap-2 bg-green-600 hover:bg-green-700">
+                      <Button onClick={() => copyToClipboard()} className="gap-2 bg-green-600 hover:bg-green-700">
                         <Download className="w-4 h-4" />
                         Copy to CSV
                       </Button>
@@ -1067,30 +1228,65 @@ export default function GreenAmptPage() {
                       />
                       <Tooltip 
                         contentStyle={{ backgroundColor: 'white', border: '1px solid #d1fae5', borderRadius: '8px', fontSize: '12px' }}
-                        formatter={(value: number) => [(units === "imperial" ? value : value * 25.4).toFixed(4), '']}
+                        formatter={(value: number, name: string) => [
+                          `${(units === "imperial" ? value : value * 25.4).toFixed(4)} ${getUnitLabel("rate", units)}`,
+                          name
+                        ]}
                       />
                       <Legend />
                       {comparisonMode ? (
-                        scenarios.map((s, idx) => (
+                        scenarios.flatMap((s, idx) => {
+                          const showBothLines = (s.method === "greenAmpt" || s.method === "modifiedGreenAmpt") && 
+                            ('rainfallRate' in s) && s.rainfallRate > 0;
+                          const lines = [
+                            <Line 
+                              key={`capacity_${idx}`}
+                              type="monotone" 
+                              dataKey={`capacity_${idx}`}
+                              name={showBothLines ? `${s.name} (Capacity)` : s.name}
+                              stroke={methodColors[s.method]}
+                              strokeWidth={2}
+                              strokeDasharray={showBothLines ? "5 5" : undefined}
+                              dot={false}
+                            />
+                          ];
+                          if (showBothLines) {
+                            lines.push(
+                              <Line 
+                                key={`actual_${idx}`}
+                                type="monotone" 
+                                dataKey={`actual_${idx}`}
+                                name={`${s.name} (Actual)`}
+                                stroke={methodColors[s.method]}
+                                strokeWidth={2}
+                                dot={false}
+                              />
+                            );
+                          }
+                          return lines;
+                        })
+                      ) : (
+                        <>
                           <Line 
-                            key={idx}
                             type="monotone" 
-                            dataKey={`rate_${idx}`}
-                            name={s.name}
-                            stroke={methodColors[s.method]}
+                            dataKey="infiltrationRate"
+                            name={hasRainfall ? "Capacity" : "Infiltration Rate"}
+                            stroke={methodColors[current.method]}
                             strokeWidth={2}
+                            strokeDasharray={hasRainfall ? "5 5" : undefined}
                             dot={false}
                           />
-                        ))
-                      ) : (
-                        <Line 
-                          type="monotone" 
-                          dataKey="infiltrationRate"
-                          name="Infiltration Rate"
-                          stroke={methodColors[current.method]}
-                          strokeWidth={2}
-                          dot={false}
-                        />
+                          {hasRainfall && (
+                            <Line 
+                              type="monotone" 
+                              dataKey="actualInfiltrationRate"
+                              name="Actual Infiltration"
+                              stroke={methodColors[current.method]}
+                              strokeWidth={2}
+                              dot={false}
+                            />
+                          )}
+                        </>
                       )}
                     </LineChart>
                   </ResponsiveContainer>
@@ -1099,34 +1295,118 @@ export default function GreenAmptPage() {
             </Card>
 
             <div className="grid grid-cols-3 gap-4">
-              <div className="p-4 rounded-xl bg-green-50 border border-green-200">
-                <p className="text-xs text-green-600 font-medium mb-1">Initial Rate</p>
-                <p className="text-xl font-mono font-semibold text-green-800" data-testid="result-initial-rate">
-                  {currentData[0]?.infiltrationRate 
-                    ? (units === "imperial" ? currentData[0].infiltrationRate : currentData[0].infiltrationRate * 25.4).toFixed(3)
-                    : '—'
-                  } <span className="text-sm font-normal">{getUnitLabel("rate", units)}</span>
-                </p>
-              </div>
-              <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200">
-                <p className="text-xs text-emerald-600 font-medium mb-1">Final Rate</p>
-                <p className="text-xl font-mono font-semibold text-emerald-800" data-testid="result-final-rate">
-                  {currentData[currentData.length - 1]?.infiltrationRate
-                    ? (units === "imperial" ? currentData[currentData.length - 1].infiltrationRate : currentData[currentData.length - 1].infiltrationRate * 25.4).toFixed(3)
-                    : '—'
-                  } <span className="text-sm font-normal">{getUnitLabel("rate", units)}</span>
-                </p>
-              </div>
-              <div className="p-4 rounded-xl bg-teal-50 border border-teal-200">
-                <p className="text-xs text-teal-600 font-medium mb-1">Total Infiltration</p>
-                <p className="text-xl font-mono font-semibold text-teal-800" data-testid="result-total">
-                  {currentData[currentData.length - 1]?.cumulativeInfiltration
-                    ? (units === "imperial" ? currentData[currentData.length - 1].cumulativeInfiltration : currentData[currentData.length - 1].cumulativeInfiltration * 25.4).toFixed(2)
-                    : '—'
-                  } <span className="text-sm font-normal">{getUnitLabel("length", units)}</span>
-                </p>
-              </div>
+              <TooltipProvider>
+                <UITooltip>
+                  <TooltipTrigger asChild>
+                    <div className="p-4 rounded-xl bg-green-50 border border-green-200 cursor-help">
+                      <p className="text-xs text-green-600 font-medium mb-1">
+                        {((current.method === "greenAmpt" || current.method === "modifiedGreenAmpt") && current.rainfallRate > 0) ? "Actual Initial Rate" : "Initial Rate"}
+                      </p>
+                      <p className="text-xl font-mono font-semibold text-green-800" data-testid="result-initial-rate">
+                        {currentData[0]?.actualInfiltrationRate 
+                          ? (units === "imperial" ? currentData[0].actualInfiltrationRate : currentData[0].actualInfiltrationRate * 25.4).toFixed(3)
+                          : '—'
+                        } <span className="text-sm font-normal">{getUnitLabel("rate", units)}</span>
+                      </p>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p>The infiltration rate at the start of the simulation when the soil is driest and can absorb water fastest.</p>
+                  </TooltipContent>
+                </UITooltip>
+              </TooltipProvider>
+              <TooltipProvider>
+                <UITooltip>
+                  <TooltipTrigger asChild>
+                    <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 cursor-help">
+                      <p className="text-xs text-emerald-600 font-medium mb-1">
+                        {((current.method === "greenAmpt" || current.method === "modifiedGreenAmpt") && current.rainfallRate > 0) ? "Actual Final Rate" : "Final Rate"}
+                      </p>
+                      <p className="text-xl font-mono font-semibold text-emerald-800" data-testid="result-final-rate">
+                        {currentData[currentData.length - 1]?.actualInfiltrationRate
+                          ? (units === "imperial" ? currentData[currentData.length - 1].actualInfiltrationRate : currentData[currentData.length - 1].actualInfiltrationRate * 25.4).toFixed(3)
+                          : '—'
+                        } <span className="text-sm font-normal">{getUnitLabel("rate", units)}</span>
+                      </p>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p>The infiltration rate at the end of the simulation. As soil becomes saturated, this rate approaches the hydraulic conductivity.</p>
+                  </TooltipContent>
+                </UITooltip>
+              </TooltipProvider>
+              <TooltipProvider>
+                <UITooltip>
+                  <TooltipTrigger asChild>
+                    <div className="p-4 rounded-xl bg-teal-50 border border-teal-200 cursor-help">
+                      <p className="text-xs text-teal-600 font-medium mb-1">Total Infiltration</p>
+                      <p className="text-xl font-mono font-semibold text-teal-800" data-testid="result-total">
+                        {currentData[currentData.length - 1]?.cumulativeInfiltration
+                          ? (units === "imperial" ? currentData[currentData.length - 1].cumulativeInfiltration : currentData[currentData.length - 1].cumulativeInfiltration * 25.4).toFixed(2)
+                          : '—'
+                        } <span className="text-sm font-normal">{getUnitLabel("length", units)}</span>
+                      </p>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p>The total depth of water that has infiltrated into the soil over the entire simulation period.</p>
+                  </TooltipContent>
+                </UITooltip>
+              </TooltipProvider>
             </div>
+
+            {(current.method === "greenAmpt" || current.method === "modifiedGreenAmpt") && current.rainfallRate > 0 && (
+              <div className="grid grid-cols-3 gap-4">
+                <TooltipProvider>
+                  <UITooltip>
+                    <TooltipTrigger asChild>
+                      <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 cursor-help">
+                        <p className="text-xs text-blue-600 font-medium mb-1">Rainfall Rate</p>
+                        <p className="text-xl font-mono font-semibold text-blue-800" data-testid="result-rainfall">
+                          {units === "imperial" ? current.rainfallRate.toFixed(2) : (current.rainfallRate * 25.4).toFixed(2)} <span className="text-sm font-normal">{getUnitLabel("rate", units)}</span>
+                        </p>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p>The constant rainfall intensity applied during the simulation.</p>
+                    </TooltipContent>
+                  </UITooltip>
+                </TooltipProvider>
+                <TooltipProvider>
+                  <UITooltip>
+                    <TooltipTrigger asChild>
+                      <div className="p-4 rounded-xl bg-orange-50 border border-orange-200 cursor-help">
+                        <p className="text-xs text-orange-600 font-medium mb-1">Time to Ponding</p>
+                        <p className="text-xl font-mono font-semibold text-orange-800" data-testid="result-ponding">
+                          {currentResult?.timeToPonding !== undefined 
+                            ? `${currentResult.timeToPonding.toFixed(2)} hr`
+                            : 'No ponding'
+                          }
+                        </p>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p>The time when rainfall intensity exceeds infiltration capacity and water begins pooling on the surface.</p>
+                    </TooltipContent>
+                  </UITooltip>
+                </TooltipProvider>
+                <TooltipProvider>
+                  <UITooltip>
+                    <TooltipTrigger asChild>
+                      <div className="p-4 rounded-xl bg-red-50 border border-red-200 cursor-help">
+                        <p className="text-xs text-red-600 font-medium mb-1">Total Runoff</p>
+                        <p className="text-xl font-mono font-semibold text-red-800" data-testid="result-runoff">
+                          {(units === "imperial" ? currentResult?.totalRunoff : (currentResult?.totalRunoff || 0) * 25.4).toFixed(2)} <span className="text-sm font-normal">{getUnitLabel("length", units)}</span>
+                        </p>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p>The total depth of water that runs off the surface when rainfall exceeds infiltration capacity.</p>
+                    </TooltipContent>
+                  </UITooltip>
+                </TooltipProvider>
+              </div>
+            )}
 
             {getValidationWarnings(current).length > 0 && (
               <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
@@ -1144,7 +1424,7 @@ export default function GreenAmptPage() {
 
             <div className="p-4 rounded-xl bg-blue-50 border border-blue-200">
               <p className="text-sm text-blue-800" data-testid="result-summary">
-                {generateSummaryStatement(currentData, current)}
+                {generateSummaryStatement(currentData, current, currentResult)}
               </p>
             </div>
 
