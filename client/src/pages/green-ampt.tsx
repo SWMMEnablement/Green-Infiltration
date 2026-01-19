@@ -20,7 +20,10 @@ import {
   ChevronDown,
   HelpCircle,
   AlertTriangle,
-  Image
+  Image,
+  Sparkles,
+  ArrowRight,
+  CheckCircle2
 } from "lucide-react";
 import { ComposedChart, LineChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import {
@@ -229,6 +232,7 @@ interface InfiltrationResult {
   data: InfiltrationDataPoint[];
   timeToPonding?: number;
   totalRunoff: number;
+  totalInfiltration: number;
 }
 
 function calculateInfiltration(params: ScenarioParams, timestep: number = 0.1): InfiltrationResult {
@@ -326,7 +330,8 @@ function calculateInfiltration(params: ScenarioParams, timestep: number = 0.1): 
     totalRunoff = cumulativeRunoff;
   }
   
-  return { data, timeToPonding, totalRunoff };
+  const totalInfiltration = data.length > 0 ? data[data.length - 1].cumulativeInfiltration : 0;
+  return { data, timeToPonding, totalRunoff, totalInfiltration };
 }
 
 function getRainfallAtTime(peakRate: number, time: number, duration: number, distribution: RainfallDistribution): number {
@@ -374,6 +379,11 @@ export default function GreenAmptPage() {
   const [savedPresets, setSavedPresets] = useState<SavedPreset[]>([]);
   const [presetName, setPresetName] = useState("");
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [activeTab, setActiveTab] = useState<"calculator" | "docs">("calculator");
+  const [showWizard, setShowWizard] = useState(() => {
+    return localStorage.getItem("infiltration_wizard_completed") !== "true";
+  });
+  const [wizardStep, setWizardStep] = useState(0);
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -958,39 +968,266 @@ export default function GreenAmptPage() {
             </div>
             
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="units-toggle" className="text-sm text-gray-600">Units:</Label>
-                <Select value={units} onValueChange={(v) => setUnits(v as UnitSystem)}>
-                  <SelectTrigger className="w-28" data-testid="units-select">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="imperial">Imperial</SelectItem>
-                    <SelectItem value="metric">Metric</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="comparison-mode"
-                  checked={comparisonMode}
-                  onCheckedChange={setComparisonMode}
-                  data-testid="comparison-toggle"
-                />
-                <Label htmlFor="comparison-mode" className="text-sm text-gray-600">Compare</Label>
+              <div className="flex items-center border rounded-lg p-1 bg-gray-100">
+                <button
+                  onClick={() => setActiveTab("calculator")}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    activeTab === "calculator" ? "bg-white shadow text-green-700" : "text-gray-600 hover:text-gray-900"
+                  }`}
+                  data-testid="tab-calculator"
+                >
+                  <Calculator className="w-4 h-4 inline mr-1.5" />
+                  Calculator
+                </button>
+                <button
+                  onClick={() => setActiveTab("docs")}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    activeTab === "docs" ? "bg-white shadow text-green-700" : "text-gray-600 hover:text-gray-900"
+                  }`}
+                  data-testid="tab-docs"
+                >
+                  <BookOpen className="w-4 h-4 inline mr-1.5" />
+                  Docs
+                </button>
               </div>
 
-              <Button variant="outline" size="sm" onClick={handlePrint} className="gap-2" data-testid="btn-print">
-                <Printer className="w-4 h-4" />
-                Print
-              </Button>
+              {activeTab === "calculator" && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="units-toggle" className="text-sm text-gray-600">Units:</Label>
+                    <Select value={units} onValueChange={(v) => setUnits(v as UnitSystem)}>
+                      <SelectTrigger className="w-28" data-testid="units-select">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="imperial">Imperial</SelectItem>
+                        <SelectItem value="metric">Metric</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="comparison-mode"
+                      checked={comparisonMode}
+                      onCheckedChange={setComparisonMode}
+                      data-testid="comparison-toggle"
+                    />
+                    <Label htmlFor="comparison-mode" className="text-sm text-gray-600">Compare</Label>
+                  </div>
+
+                  <Button variant="outline" size="sm" onClick={handlePrint} className="gap-2" data-testid="btn-print">
+                    <Printer className="w-4 h-4" />
+                    Print
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>
       </header>
 
+      {/* Getting Started Wizard */}
+      {showWizard && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-lg bg-white shadow-2xl">
+            <CardHeader className="text-center pb-2">
+              <div className="mx-auto p-3 rounded-full bg-green-100 w-fit mb-2">
+                <Sparkles className="w-8 h-8 text-green-600" />
+              </div>
+              <CardTitle className="text-xl">Welcome to Infiltration Calculator</CardTitle>
+              <CardDescription>Let's get you started with SWMM5 infiltration modeling</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {wizardStep === 0 && (
+                <div className="space-y-4">
+                  <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                    <h3 className="font-medium text-green-800 mb-2">Choose an Infiltration Method</h3>
+                    <p className="text-sm text-green-700">Start by selecting a method that matches your soil data and project requirements:</p>
+                    <ul className="mt-2 space-y-1 text-sm text-green-700">
+                      <li><strong>Green-Ampt:</strong> Best for detailed physical soil parameters</li>
+                      <li><strong>Horton:</strong> Simple empirical approach with decay curve</li>
+                      <li><strong>SCS Curve Number:</strong> Quick estimates based on land use</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+              {wizardStep === 1 && (
+                <div className="space-y-4">
+                  <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <h3 className="font-medium text-blue-800 mb-2">Set Your Parameters</h3>
+                    <p className="text-sm text-blue-700">Use the soil type presets for quick setup, or enter custom values:</p>
+                    <ul className="mt-2 space-y-1 text-sm text-blue-700">
+                      <li><CheckCircle2 className="w-4 h-4 inline mr-1" />Hover over parameters for guidance</li>
+                      <li><CheckCircle2 className="w-4 h-4 inline mr-1" />Add rainfall rate to calculate actual infiltration</li>
+                      <li><CheckCircle2 className="w-4 h-4 inline mr-1" />Save presets for reuse</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+              {wizardStep === 2 && (
+                <div className="space-y-4">
+                  <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                    <h3 className="font-medium text-purple-800 mb-2">Analyze Results</h3>
+                    <p className="text-sm text-purple-700">View infiltration curves and export data:</p>
+                    <ul className="mt-2 space-y-1 text-sm text-purple-700">
+                      <li><CheckCircle2 className="w-4 h-4 inline mr-1" />Compare multiple scenarios side-by-side</li>
+                      <li><CheckCircle2 className="w-4 h-4 inline mr-1" />Copy data to clipboard for spreadsheets</li>
+                      <li><CheckCircle2 className="w-4 h-4 inline mr-1" />Print reports for documentation</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+              <div className="flex justify-between pt-4">
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    localStorage.setItem("infiltration_wizard_completed", "true");
+                    setShowWizard(false);
+                  }}
+                  data-testid="wizard-skip"
+                >
+                  Skip
+                </Button>
+                <div className="flex gap-2">
+                  {wizardStep > 0 && (
+                    <Button variant="outline" onClick={() => setWizardStep(s => s - 1)} data-testid="wizard-back">
+                      Back
+                    </Button>
+                  )}
+                  {wizardStep < 2 ? (
+                    <Button onClick={() => setWizardStep(s => s + 1)} className="gap-1" data-testid="wizard-next">
+                      Next <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => {
+                        localStorage.setItem("infiltration_wizard_completed", "true");
+                        setShowWizard(false);
+                      }}
+                      className="gap-1 bg-green-600 hover:bg-green-700"
+                      data-testid="wizard-finish"
+                    >
+                      Get Started <CheckCircle2 className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <div className="flex justify-center gap-1.5 pt-2">
+                {[0, 1, 2].map(step => (
+                  <div
+                    key={step}
+                    className={`w-2 h-2 rounded-full transition-colors ${
+                      step === wizardStep ? "bg-green-600" : "bg-gray-300"
+                    }`}
+                  />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+        {activeTab === "docs" ? (
+          <div className="max-w-4xl mx-auto space-y-6">
+            <Card className="border-green-200/60 shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BookOpen className="w-5 h-5 text-green-600" />
+                  Documentation
+                </CardTitle>
+                <CardDescription>Learn how to use the SWMM5 Infiltration Calculator</CardDescription>
+              </CardHeader>
+              <CardContent className="prose prose-green max-w-none space-y-6">
+                <section>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Overview</h3>
+                  <p className="text-gray-700">
+                    This calculator implements four infiltration methods from SWMM5 (Storm Water Management Model):
+                    Green-Ampt, Modified Green-Ampt, Horton, and SCS Curve Number. Use it to estimate how water
+                    infiltrates into soil during rainfall events.
+                  </p>
+                </section>
+
+                <section>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Infiltration Methods</h3>
+                  <div className="space-y-4">
+                    <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                      <h4 className="font-medium text-green-800">Green-Ampt Method</h4>
+                      <p className="text-sm text-green-700 mt-1">
+                        A physically-based method using Darcy's law. Requires suction head (ψ), hydraulic conductivity (K),
+                        and initial moisture deficit (θ). Best when you have detailed soil data.
+                      </p>
+                      <p className="text-xs text-green-600 mt-2 font-mono">f = K × (1 + ψ×Δθ / F)</p>
+                    </div>
+                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <h4 className="font-medium text-blue-800">Modified Green-Ampt</h4>
+                      <p className="text-sm text-blue-700 mt-1">
+                        Extends Green-Ampt with moisture redistribution during dry periods. Includes field capacity
+                        and wilting point parameters for recovery modeling.
+                      </p>
+                    </div>
+                    <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+                      <h4 className="font-medium text-amber-800">Horton Method</h4>
+                      <p className="text-sm text-amber-700 mt-1">
+                        An empirical approach where infiltration decays exponentially from a maximum rate (f₀) to a
+                        minimum rate (fc). Simple and widely used.
+                      </p>
+                      <p className="text-xs text-amber-600 mt-2 font-mono">f = fc + (f₀ - fc) × e^(-kt)</p>
+                    </div>
+                    <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                      <h4 className="font-medium text-purple-800">SCS Curve Number</h4>
+                      <p className="text-sm text-purple-700 mt-1">
+                        Uses a dimensionless curve number (CN) based on soil type and land use. Quick estimates
+                        without detailed soil parameters. CN ranges from 30 (low runoff) to 98 (impervious).
+                      </p>
+                    </div>
+                  </div>
+                </section>
+
+                <section>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Rainfall Distributions</h3>
+                  <p className="text-gray-700 mb-2">When rainfall rate is set, you can choose how intensity varies over time:</p>
+                  <ul className="space-y-1 text-sm text-gray-700">
+                    <li><strong>Constant:</strong> Uniform intensity throughout the storm</li>
+                    <li><strong>Triangular:</strong> Peaks at the middle of the storm</li>
+                    <li><strong>Front-loaded:</strong> Higher intensity at the start, decreasing over time</li>
+                    <li><strong>Back-loaded:</strong> Lower intensity at start, increasing toward the end</li>
+                    <li><strong>SCS Type II:</strong> Standard design storm with intense central peak</li>
+                  </ul>
+                </section>
+
+                <section>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Using the Calculator</h3>
+                  <ol className="space-y-2 text-sm text-gray-700 list-decimal list-inside">
+                    <li>Select an infiltration method from the dropdown</li>
+                    <li>Choose a soil type preset or enter custom parameters</li>
+                    <li>Set the simulation duration and rainfall rate (optional)</li>
+                    <li>View the infiltration curve and results</li>
+                    <li>Enable "Compare" mode to analyze multiple scenarios</li>
+                    <li>Save presets for future use</li>
+                  </ol>
+                </section>
+
+                <section>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Tips</h3>
+                  <ul className="space-y-1 text-sm text-gray-700 list-disc list-inside">
+                    <li>Hover over parameter labels to see typical ranges and descriptions</li>
+                    <li>Use the table view to see detailed timestep data</li>
+                    <li>Copy data to clipboard for use in Excel or other tools</li>
+                    <li>Print reports for project documentation</li>
+                  </ul>
+                </section>
+              </CardContent>
+            </Card>
+            <div className="text-center">
+              <Button onClick={() => setActiveTab("calculator")} className="gap-2" data-testid="btn-start-calculating">
+                <Calculator className="w-4 h-4" />
+                Start Calculating
+              </Button>
+            </div>
+          </div>
+        ) : (
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1 space-y-6 no-print">
             {comparisonMode && (
@@ -1378,6 +1615,78 @@ export default function GreenAmptPage() {
               </CardContent>
             </Card>
 
+            {/* Mass Balance Table */}
+            {hasRainfall && currentResult && (
+              <Card className="border-blue-200/60 shadow-lg">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <TableIcon className="w-5 h-5 text-blue-600" />
+                    Mass Balance
+                  </CardTitle>
+                  <CardDescription>Water balance for the simulation period</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="font-semibold">Component</TableHead>
+                        <TableHead className="text-right font-semibold">Depth ({getUnitLabel("length", units)})</TableHead>
+                        <TableHead className="text-right font-semibold">% of Rainfall</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(() => {
+                        const rainfallRate = 'rainfallRate' in current ? (current as any).rainfallRate : 0;
+                        const totalRainfall = rainfallRate * current.duration;
+                        const totalInfiltration = currentResult.totalInfiltration;
+                        const totalRunoff = currentResult.totalRunoff;
+                        const remainingAbstraction = Math.max(0, totalRainfall - totalInfiltration - totalRunoff);
+                        
+                        const convertDepth = (val: number) => units === "imperial" ? val : val * 25.4;
+                        const pctOf = (val: number) => totalRainfall > 0 ? ((val / totalRainfall) * 100).toFixed(1) : "0.0";
+                        
+                        return (
+                          <>
+                            <TableRow className="bg-blue-50">
+                              <TableCell className="font-medium text-blue-800">Total Rainfall (Input)</TableCell>
+                              <TableCell className="text-right font-mono">{convertDepth(totalRainfall).toFixed(3)}</TableCell>
+                              <TableCell className="text-right font-mono">100.0%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell className="font-medium text-green-700">Infiltration</TableCell>
+                              <TableCell className="text-right font-mono">{convertDepth(totalInfiltration).toFixed(3)}</TableCell>
+                              <TableCell className="text-right font-mono">{pctOf(totalInfiltration)}%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell className="font-medium text-red-700">Surface Runoff</TableCell>
+                              <TableCell className="text-right font-mono">{convertDepth(totalRunoff).toFixed(3)}</TableCell>
+                              <TableCell className="text-right font-mono">{pctOf(totalRunoff)}%</TableCell>
+                            </TableRow>
+                            {remainingAbstraction > 0.0001 && (
+                              <TableRow>
+                                <TableCell className="font-medium text-amber-700">Other Abstractions</TableCell>
+                                <TableCell className="text-right font-mono">{convertDepth(remainingAbstraction).toFixed(3)}</TableCell>
+                                <TableCell className="text-right font-mono">{pctOf(remainingAbstraction)}%</TableCell>
+                              </TableRow>
+                            )}
+                            <TableRow className="border-t-2 border-gray-300 bg-gray-50">
+                              <TableCell className="font-semibold">Balance Check</TableCell>
+                              <TableCell className="text-right font-mono font-semibold">
+                                {convertDepth(totalInfiltration + totalRunoff + remainingAbstraction).toFixed(3)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono font-semibold">
+                                {pctOf(totalInfiltration + totalRunoff + remainingAbstraction)}%
+                              </TableCell>
+                            </TableRow>
+                          </>
+                        );
+                      })()}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+
             <div className="grid grid-cols-3 gap-4">
               <TooltipProvider>
                 <UITooltip>
@@ -1546,6 +1855,7 @@ export default function GreenAmptPage() {
             </Card>
           </div>
         </div>
+        )}
       </main>
     </div>
   );
