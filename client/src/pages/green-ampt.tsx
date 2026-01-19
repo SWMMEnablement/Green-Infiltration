@@ -22,7 +22,7 @@ import {
   AlertTriangle,
   Image
 } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { ComposedChart, LineChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import {
   Dialog,
   DialogContent,
@@ -127,12 +127,15 @@ interface BaseParams {
   duration: number;
 }
 
+type RainfallDistribution = "constant" | "triangular" | "frontLoaded" | "backLoaded" | "scsTypeII";
+
 interface GreenAmptParams extends BaseParams {
   method: "greenAmpt";
   suctionHead: number;
   conductivity: number;
   initialDeficit: number;
   rainfallRate: number;
+  rainfallDistribution: RainfallDistribution;
 }
 
 interface ModifiedGreenAmptParams extends BaseParams {
@@ -144,6 +147,7 @@ interface ModifiedGreenAmptParams extends BaseParams {
   fieldCapacity: number;
   redistributionTime: number;
   rainfallRate: number;
+  rainfallDistribution: RainfallDistribution;
 }
 
 interface HortonParams extends BaseParams {
@@ -218,6 +222,7 @@ interface InfiltrationDataPoint {
   cumulativeInfiltration: number;
   runoff?: number;
   cumulativeRunoff?: number;
+  rainfallIntensity?: number;
 }
 
 interface InfiltrationResult {
@@ -235,8 +240,10 @@ function calculateInfiltration(params: ScenarioParams, timestep: number = 0.1): 
     let F = 0.001;
     let time = 0;
     let cumulativeRunoff = 0;
-    const rainfall = params.rainfallRate;
     while (time <= params.duration) {
+      const rainfall = params.rainfallRate > 0 
+        ? getRainfallAtTime(params.rainfallRate, time, params.duration, params.rainfallDistribution)
+        : 0;
       const potentialRate = params.conductivity * (1 + (params.suctionHead * params.initialDeficit) / F);
       const actualRate = rainfall > 0 ? Math.min(potentialRate, rainfall) : potentialRate;
       const runoffRate = rainfall > 0 ? Math.max(0, rainfall - potentialRate) : 0;
@@ -251,7 +258,8 @@ function calculateInfiltration(params: ScenarioParams, timestep: number = 0.1): 
         actualInfiltrationRate: parseFloat(actualRate.toFixed(4)),
         cumulativeInfiltration: parseFloat(F.toFixed(4)),
         runoff: parseFloat(runoffRate.toFixed(4)),
-        cumulativeRunoff: parseFloat(cumulativeRunoff.toFixed(4))
+        cumulativeRunoff: parseFloat(cumulativeRunoff.toFixed(4)),
+        rainfallIntensity: parseFloat(rainfall.toFixed(4))
       });
       time += timestep;
     }
@@ -260,8 +268,10 @@ function calculateInfiltration(params: ScenarioParams, timestep: number = 0.1): 
     let F = 0.001;
     let time = 0;
     let cumulativeRunoff = 0;
-    const rainfall = params.rainfallRate;
     while (time <= params.duration) {
+      const rainfall = params.rainfallRate > 0 
+        ? getRainfallAtTime(params.rainfallRate, time, params.duration, params.rainfallDistribution)
+        : 0;
       const redistributionFactor = Math.exp(-time / Math.max(params.redistributionTime, 0.1));
       const effectiveDeficit = params.initialDeficit * (1 - redistributionFactor * 0.3);
       const potentialRate = params.conductivity * (1 + (params.suctionHead * effectiveDeficit) / F);
@@ -277,7 +287,8 @@ function calculateInfiltration(params: ScenarioParams, timestep: number = 0.1): 
         actualInfiltrationRate: parseFloat(actualRate.toFixed(4)),
         cumulativeInfiltration: parseFloat(F.toFixed(4)),
         runoff: parseFloat(runoffRate.toFixed(4)),
-        cumulativeRunoff: parseFloat(cumulativeRunoff.toFixed(4))
+        cumulativeRunoff: parseFloat(cumulativeRunoff.toFixed(4)),
+        rainfallIntensity: parseFloat(rainfall.toFixed(4))
       });
       F += actualRate * timestep;
       time += timestep;
@@ -318,12 +329,33 @@ function calculateInfiltration(params: ScenarioParams, timestep: number = 0.1): 
   return { data, timeToPonding, totalRunoff };
 }
 
+function getRainfallAtTime(peakRate: number, time: number, duration: number, distribution: RainfallDistribution): number {
+  const t = time / duration;
+  switch (distribution) {
+    case "constant":
+      return peakRate;
+    case "triangular":
+      return t < 0.5 ? peakRate * 2 * t : peakRate * 2 * (1 - t);
+    case "frontLoaded":
+      return peakRate * Math.exp(-2 * t) * 2;
+    case "backLoaded":
+      return peakRate * (1 - Math.exp(-3 * t)) * 1.5;
+    case "scsTypeII":
+      if (t < 0.375) return peakRate * 0.3;
+      if (t < 0.5) return peakRate * 2.5;
+      if (t < 0.625) return peakRate * 1.5;
+      return peakRate * 0.4;
+    default:
+      return peakRate;
+  }
+}
+
 function getDefaultParams(method: InfiltrationMethod): ScenarioParams {
   switch (method) {
     case "greenAmpt":
-      return { name: "Green-Ampt", method: "greenAmpt", duration: 6, suctionHead: 11.01, conductivity: 0.43, initialDeficit: 0.30, rainfallRate: 2.0 };
+      return { name: "Green-Ampt", method: "greenAmpt", duration: 6, suctionHead: 11.01, conductivity: 0.43, initialDeficit: 0.30, rainfallRate: 2.0, rainfallDistribution: "constant" };
     case "modifiedGreenAmpt":
-      return { name: "Modified G-A", method: "modifiedGreenAmpt", duration: 6, suctionHead: 11.01, conductivity: 0.43, initialDeficit: 0.30, saturatedContent: 0.453, fieldCapacity: 0.18, redistributionTime: 4.0, rainfallRate: 2.0 };
+      return { name: "Modified G-A", method: "modifiedGreenAmpt", duration: 6, suctionHead: 11.01, conductivity: 0.43, initialDeficit: 0.30, saturatedContent: 0.453, fieldCapacity: 0.18, redistributionTime: 4.0, rainfallRate: 2.0, rainfallDistribution: "constant" };
     case "horton":
       return { name: "Horton", method: "horton", duration: 6, maxRate: 3.0, minRate: 0.5, decayConstant: 2.0 };
     case "curveNumber":
@@ -688,6 +720,27 @@ export default function GreenAmptPage() {
             />
             <p className="text-xs text-muted-foreground">Set to 0 for potential infiltration only (no runoff calculation)</p>
           </div>
+          {params.rainfallRate > 0 && (
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Rainfall Distribution</Label>
+              <Select
+                value={params.rainfallDistribution || "constant"}
+                onValueChange={(v) => updateScenario(activeScenarioIndex, { rainfallDistribution: v as RainfallDistribution })}
+              >
+                <SelectTrigger className="font-mono border-blue-200" data-testid="select-rainfall-distribution">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="constant">Constant (uniform)</SelectItem>
+                  <SelectItem value="triangular">Triangular (peak at center)</SelectItem>
+                  <SelectItem value="frontLoaded">Front-loaded (peak early)</SelectItem>
+                  <SelectItem value="backLoaded">Back-loaded (peak late)</SelectItem>
+                  <SelectItem value="scsTypeII">SCS Type II (design storm)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Distribution pattern of rainfall intensity over the storm duration</p>
+            </div>
+          )}
           {params.method === "modifiedGreenAmpt" && (
             <>
               <div className="pt-3 border-t border-green-100">
@@ -1213,7 +1266,7 @@ export default function GreenAmptPage() {
               <CardContent>
                 <div className="h-80" ref={chartRef}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                    <ComposedChart data={chartData} margin={{ top: 10, right: 60, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                       <XAxis 
                         dataKey="time" 
@@ -1222,9 +1275,18 @@ export default function GreenAmptPage() {
                         label={{ value: `Time (${getUnitLabel("time", units)})`, position: 'insideBottom', offset: -5, fontSize: 12 }}
                       />
                       <YAxis 
+                        yAxisId="left"
                         tick={{ fontSize: 12 }} 
                         tickLine={false}
                         label={{ value: `Rate (${getUnitLabel("rate", units)})`, angle: -90, position: 'insideLeft', fontSize: 12 }}
+                      />
+                      <YAxis 
+                        yAxisId="right"
+                        orientation="right"
+                        tick={{ fontSize: 12 }} 
+                        tickLine={false}
+                        label={{ value: `Rainfall (${getUnitLabel("rate", units)})`, angle: 90, position: 'insideRight', fontSize: 12 }}
+                        reversed
                       />
                       <Tooltip 
                         contentStyle={{ backgroundColor: 'white', border: '1px solid #d1fae5', borderRadius: '8px', fontSize: '12px' }}
@@ -1234,6 +1296,16 @@ export default function GreenAmptPage() {
                         ]}
                       />
                       <Legend />
+                      {hasRainfall && (
+                        <Bar
+                          yAxisId="right"
+                          dataKey="rainfallIntensity"
+                          name="Rainfall Intensity"
+                          fill="#60a5fa"
+                          opacity={0.6}
+                          barSize={8}
+                        />
+                      )}
                       {comparisonMode ? (
                         scenarios.flatMap((s, idx) => {
                           const showBothLines = (s.method === "greenAmpt" || s.method === "modifiedGreenAmpt") && 
@@ -1241,6 +1313,7 @@ export default function GreenAmptPage() {
                           const lines = [
                             <Line 
                               key={`capacity_${idx}`}
+                              yAxisId="left"
                               type="monotone" 
                               dataKey={`capacity_${idx}`}
                               name={showBothLines ? `${s.name} (Capacity)` : s.name}
@@ -1254,6 +1327,7 @@ export default function GreenAmptPage() {
                             lines.push(
                               <Line 
                                 key={`actual_${idx}`}
+                                yAxisId="left"
                                 type="monotone" 
                                 dataKey={`actual_${idx}`}
                                 name={`${s.name} (Actual)`}
@@ -1268,6 +1342,7 @@ export default function GreenAmptPage() {
                       ) : (
                         <>
                           <Line 
+                            yAxisId="left"
                             type="monotone" 
                             dataKey="infiltrationRate"
                             name={hasRainfall ? "Capacity" : "Infiltration Rate"}
@@ -1278,6 +1353,7 @@ export default function GreenAmptPage() {
                           />
                           {hasRainfall && (
                             <Line 
+                              yAxisId="left"
                               type="monotone" 
                               dataKey="actualInfiltrationRate"
                               name="Actual Infiltration"
@@ -1288,7 +1364,7 @@ export default function GreenAmptPage() {
                           )}
                         </>
                       )}
-                    </LineChart>
+                    </ComposedChart>
                   </ResponsiveContainer>
                 </div>
               </CardContent>
