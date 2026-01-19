@@ -130,7 +130,7 @@ interface BaseParams {
   duration: number;
 }
 
-type RainfallDistribution = "constant" | "triangular" | "frontLoaded" | "backLoaded" | "scsTypeII";
+type RainfallDistribution = "constant" | "triangular" | "frontLoaded" | "backLoaded" | "scsTypeI" | "scsTypeIA" | "scsTypeII" | "scsTypeIII" | "huffQ1" | "huffQ2" | "huffQ3" | "huffQ4" | "chicago";
 
 interface GreenAmptParams extends BaseParams {
   method: "greenAmpt";
@@ -345,11 +345,59 @@ function getRainfallAtTime(peakRate: number, time: number, duration: number, dis
       return peakRate * Math.exp(-2 * t) * 2;
     case "backLoaded":
       return peakRate * (1 - Math.exp(-3 * t)) * 1.5;
+    case "scsTypeI":
+      if (t < 0.25) return peakRate * 0.4;
+      if (t < 0.375) return peakRate * 0.8;
+      if (t < 0.5) return peakRate * 2.0;
+      if (t < 0.625) return peakRate * 1.2;
+      return peakRate * 0.5;
+    case "scsTypeIA":
+      if (t < 0.25) return peakRate * 0.5;
+      if (t < 0.375) return peakRate * 2.2;
+      if (t < 0.5) return peakRate * 1.0;
+      return peakRate * 0.4;
     case "scsTypeII":
       if (t < 0.375) return peakRate * 0.3;
       if (t < 0.5) return peakRate * 2.5;
       if (t < 0.625) return peakRate * 1.5;
       return peakRate * 0.4;
+    case "scsTypeIII":
+      if (t < 0.25) return peakRate * 0.35;
+      if (t < 0.5) return peakRate * 2.2;
+      if (t < 0.625) return peakRate * 1.3;
+      return peakRate * 0.45;
+    case "huffQ1":
+      if (t < 0.25) return peakRate * 2.5;
+      if (t < 0.5) return peakRate * 1.0;
+      if (t < 0.75) return peakRate * 0.4;
+      return peakRate * 0.2;
+    case "huffQ2":
+      if (t < 0.25) return peakRate * 0.6;
+      if (t < 0.5) return peakRate * 2.2;
+      if (t < 0.75) return peakRate * 0.8;
+      return peakRate * 0.4;
+    case "huffQ3":
+      if (t < 0.25) return peakRate * 0.4;
+      if (t < 0.5) return peakRate * 0.8;
+      if (t < 0.75) return peakRate * 2.2;
+      return peakRate * 0.6;
+    case "huffQ4":
+      if (t < 0.25) return peakRate * 0.2;
+      if (t < 0.5) return peakRate * 0.4;
+      if (t < 0.75) return peakRate * 1.0;
+      return peakRate * 2.5;
+    case "chicago":
+      const r = 0.4;
+      const peakTime = r * duration;
+      const a = 0.8;
+      const b = 0.6;
+      if (time <= peakTime) {
+        const tb = (peakTime - time) / peakTime;
+        return peakRate * (1 + a * tb) / Math.pow(1 + b * tb, 2);
+      } else {
+        const ta = (time - peakTime) / (duration - peakTime);
+        return peakRate * (1 + a * ta) / Math.pow(1 + b * ta, 2);
+      }
     default:
       return peakRate;
   }
@@ -752,7 +800,15 @@ export default function GreenAmptPage() {
                   <SelectItem value="triangular">Triangular (peak at center)</SelectItem>
                   <SelectItem value="frontLoaded">Front-loaded (peak early)</SelectItem>
                   <SelectItem value="backLoaded">Back-loaded (peak late)</SelectItem>
-                  <SelectItem value="scsTypeII">SCS Type II (design storm)</SelectItem>
+                  <SelectItem value="scsTypeI">SCS Type I (Pacific maritime)</SelectItem>
+                  <SelectItem value="scsTypeIA">SCS Type IA (Pacific NW)</SelectItem>
+                  <SelectItem value="scsTypeII">SCS Type II (most of US)</SelectItem>
+                  <SelectItem value="scsTypeIII">SCS Type III (Gulf/Atlantic)</SelectItem>
+                  <SelectItem value="huffQ1">Huff 1st Quartile (early peak)</SelectItem>
+                  <SelectItem value="huffQ2">Huff 2nd Quartile</SelectItem>
+                  <SelectItem value="huffQ3">Huff 3rd Quartile</SelectItem>
+                  <SelectItem value="huffQ4">Huff 4th Quartile (late peak)</SelectItem>
+                  <SelectItem value="chicago">Chicago Storm</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">Distribution pattern of rainfall intensity over the storm duration</p>
@@ -1000,7 +1056,7 @@ export default function GreenAmptPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="imperial">Imperial</SelectItem>
+                        <SelectItem value="imperial">USA</SelectItem>
                         <SelectItem value="metric">Metric</SelectItem>
                       </SelectContent>
                     </Select>
@@ -1141,7 +1197,7 @@ export default function GreenAmptPage() {
               </CardHeader>
               <CardContent className="prose prose-green max-w-none space-y-6">
                 <section>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Overview</h3>
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">Overview</h3>
                   <p className="text-gray-700">
                     This calculator implements four infiltration methods from SWMM5 (Storm Water Management Model):
                     Green-Ampt, Modified Green-Ampt, Horton, and SCS Curve Number. Use it to estimate how water
@@ -1150,55 +1206,111 @@ export default function GreenAmptPage() {
                 </section>
 
                 <section>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Infiltration Methods</h3>
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">Infiltration Methods</h3>
                   <div className="space-y-4">
                     <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                      <h4 className="font-medium text-green-800">Green-Ampt Method</h4>
+                      <h4 className="font-bold text-green-800">Green-Ampt Method</h4>
                       <p className="text-sm text-green-700 mt-1">
                         A physically-based method using Darcy's law. Requires suction head (ψ), hydraulic conductivity (K),
                         and initial moisture deficit (θ). Best when you have detailed soil data.
                       </p>
-                      <p className="text-xs text-green-600 mt-2 font-mono">f = K × (1 + ψ×Δθ / F)</p>
+                      <pre className="text-sm bg-green-100 p-2 rounded mt-2 font-mono overflow-x-auto"><code>f = K × (1 + ψ×Δθ / F)
+
+where:
+  f  = infiltration rate (in/hr)
+  K  = hydraulic conductivity (in/hr)
+  ψ  = suction head (in)
+  Δθ = moisture deficit (unitless)
+  F  = cumulative infiltration (in)</code></pre>
                     </div>
                     <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                      <h4 className="font-medium text-blue-800">Modified Green-Ampt</h4>
+                      <h4 className="font-bold text-blue-800">Modified Green-Ampt</h4>
                       <p className="text-sm text-blue-700 mt-1">
                         Extends Green-Ampt with moisture redistribution during dry periods. Includes field capacity
                         and wilting point parameters for recovery modeling.
                       </p>
+                      <pre className="text-sm bg-blue-100 p-2 rounded mt-2 font-mono overflow-x-auto"><code>Recovery: θ(t) = θ_wp + (θ_fc - θ_wp) × (1 - e^(-t/τ))
+
+where:
+  θ_fc = field capacity
+  θ_wp = wilting point
+  τ    = redistribution time constant</code></pre>
                     </div>
                     <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
-                      <h4 className="font-medium text-amber-800">Horton Method</h4>
+                      <h4 className="font-bold text-amber-800">Horton Method</h4>
                       <p className="text-sm text-amber-700 mt-1">
                         An empirical approach where infiltration decays exponentially from a maximum rate (f₀) to a
                         minimum rate (fc). Simple and widely used.
                       </p>
-                      <p className="text-xs text-amber-600 mt-2 font-mono">f = fc + (f₀ - fc) × e^(-kt)</p>
+                      <pre className="text-sm bg-amber-100 p-2 rounded mt-2 font-mono overflow-x-auto"><code>f(t) = fc + (f₀ - fc) × e^(-k×t)
+
+where:
+  f(t) = infiltration rate at time t
+  fc   = minimum (final) rate (in/hr)
+  f₀   = maximum (initial) rate (in/hr)
+  k    = decay constant (1/hr)</code></pre>
                     </div>
                     <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-                      <h4 className="font-medium text-purple-800">SCS Curve Number</h4>
+                      <h4 className="font-bold text-purple-800">SCS Curve Number</h4>
                       <p className="text-sm text-purple-700 mt-1">
                         Uses a dimensionless curve number (CN) based on soil type and land use. Quick estimates
                         without detailed soil parameters. CN ranges from 30 (low runoff) to 98 (impervious).
                       </p>
+                      <pre className="text-sm bg-purple-100 p-2 rounded mt-2 font-mono overflow-x-auto"><code>S = (1000 / CN) - 10
+Ia = 0.2 × S
+Q = (P - Ia)² / (P - Ia + S)  for P {">"} Ia
+
+where:
+  S  = potential maximum retention (in)
+  Ia = initial abstraction (in)
+  Q  = runoff depth (in)
+  P  = rainfall depth (in)</code></pre>
                     </div>
                   </div>
                 </section>
 
                 <section>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Rainfall Distributions</h3>
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">Rainfall Distributions</h3>
                   <p className="text-gray-700 mb-2">When rainfall rate is set, you can choose how intensity varies over time:</p>
-                  <ul className="space-y-1 text-sm text-gray-700">
-                    <li><strong>Constant:</strong> Uniform intensity throughout the storm</li>
-                    <li><strong>Triangular:</strong> Peaks at the middle of the storm</li>
-                    <li><strong>Front-loaded:</strong> Higher intensity at the start, decreasing over time</li>
-                    <li><strong>Back-loaded:</strong> Lower intensity at start, increasing toward the end</li>
-                    <li><strong>SCS Type II:</strong> Standard design storm with intense central peak</li>
-                  </ul>
+                  <div className="grid md:grid-cols-2 gap-2 text-sm text-gray-700">
+                    <div>
+                      <p className="font-bold text-gray-800 mb-1">Basic Patterns:</p>
+                      <ul className="space-y-1 list-disc list-inside">
+                        <li><strong>Constant:</strong> Uniform intensity</li>
+                        <li><strong>Triangular:</strong> Peak at center</li>
+                        <li><strong>Front-loaded:</strong> Peak early</li>
+                        <li><strong>Back-loaded:</strong> Peak late</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-bold text-gray-800 mb-1">SCS Design Storms:</p>
+                      <ul className="space-y-1 list-disc list-inside">
+                        <li><strong>Type I:</strong> Pacific maritime climate</li>
+                        <li><strong>Type IA:</strong> Pacific Northwest</li>
+                        <li><strong>Type II:</strong> Most of continental US</li>
+                        <li><strong>Type III:</strong> Gulf/Atlantic coastal</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-bold text-gray-800 mb-1">Huff Quartiles:</p>
+                      <ul className="space-y-1 list-disc list-inside">
+                        <li><strong>1st Quartile:</strong> Peak in first 25%</li>
+                        <li><strong>2nd Quartile:</strong> Peak 25-50%</li>
+                        <li><strong>3rd Quartile:</strong> Peak 50-75%</li>
+                        <li><strong>4th Quartile:</strong> Peak in last 25%</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-bold text-gray-800 mb-1">Synthetic Storms:</p>
+                      <ul className="space-y-1 list-disc list-inside">
+                        <li><strong>Chicago:</strong> IDF-based design storm</li>
+                      </ul>
+                    </div>
+                  </div>
                 </section>
 
                 <section>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Using the Calculator</h3>
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">Using the Calculator</h3>
                   <ol className="space-y-2 text-sm text-gray-700 list-decimal list-inside">
                     <li>Select an infiltration method from the dropdown</li>
                     <li>Choose a soil type preset or enter custom parameters</li>
@@ -1210,7 +1322,7 @@ export default function GreenAmptPage() {
                 </section>
 
                 <section>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Tips</h3>
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">Tips</h3>
                   <ul className="space-y-1 text-sm text-gray-700 list-disc list-inside">
                     <li>Hover over parameter labels to see typical ranges and descriptions</li>
                     <li>Use the table view to see detailed timestep data</li>
@@ -1470,10 +1582,10 @@ export default function GreenAmptPage() {
                               {scenarios.map((s, idx) => {
                                 const scenarioHasRainfall = (s.method === "greenAmpt" || s.method === "modifiedGreenAmpt") && s.rainfallRate > 0;
                                 const capacity = units === "imperial" 
-                                  ? calculatedResults[idx]?.data[i]?.infiltrationRate.toFixed(4)
+                                  ? (calculatedResults[idx]?.data[i]?.infiltrationRate || 0).toFixed(4)
                                   : ((calculatedResults[idx]?.data[i]?.infiltrationRate || 0) * 25.4).toFixed(4);
                                 const actual = units === "imperial" 
-                                  ? calculatedResults[idx]?.data[i]?.actualInfiltrationRate.toFixed(4)
+                                  ? (calculatedResults[idx]?.data[i]?.actualInfiltrationRate || 0).toFixed(4)
                                   : ((calculatedResults[idx]?.data[i]?.actualInfiltrationRate || 0) * 25.4).toFixed(4);
                                 return scenarioHasRainfall ? (
                                   <Fragment key={idx}>
@@ -1487,7 +1599,7 @@ export default function GreenAmptPage() {
                               {scenarios.map((_, idx) => (
                                 <TableCell key={`cum-${idx}`}>
                                   {units === "imperial"
-                                    ? calculatedResults[idx]?.data[i]?.cumulativeInfiltration.toFixed(4)
+                                    ? (calculatedResults[idx]?.data[i]?.cumulativeInfiltration || 0).toFixed(4)
                                     : ((calculatedResults[idx]?.data[i]?.cumulativeInfiltration || 0) * 25.4).toFixed(4)
                                   }
                                 </TableCell>
