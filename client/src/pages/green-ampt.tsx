@@ -1285,7 +1285,8 @@ export default function GreenAmptPage() {
                         orientation="right"
                         tick={{ fontSize: 12 }} 
                         tickLine={false}
-                        label={{ value: `Rainfall (${getUnitLabel("rate", units)})`, angle: 90, position: 'insideRight', fontSize: 12 }}
+                        label={{ value: `Rainfall (${getUnitLabel("rate", units)})`, angle: 90, position: 'outsideRight', dx: 15, fontSize: 12 }}
+                        domain={[0, (dataMax: number) => Math.max(dataMax * 4, 0.1)]}
                         reversed
                       />
                       <Tooltip 
