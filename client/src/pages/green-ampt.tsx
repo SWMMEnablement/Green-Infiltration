@@ -481,13 +481,18 @@ export default function GreenAmptPage() {
         }
       }
       const point: any = { time };
+      let maxRainfallIntensity = 0;
       scenarios.forEach((s, idx) => {
         const dataPoint = calculatedResults[idx]?.data[i];
         if (dataPoint) {
           point[`capacity_${idx}`] = dataPoint.infiltrationRate;
           point[`actual_${idx}`] = dataPoint.actualInfiltrationRate;
+          if (dataPoint.rainfallIntensity !== undefined && dataPoint.rainfallIntensity > maxRainfallIntensity) {
+            maxRainfallIntensity = dataPoint.rainfallIntensity;
+          }
         }
       });
+      point.rainfallIntensity = maxRainfallIntensity;
       combined.push(point);
     }
     return combined;
@@ -648,7 +653,9 @@ export default function GreenAmptPage() {
   const current = scenarios[activeScenarioIndex];
   const currentResult = calculatedResults[activeScenarioIndex];
   const currentData = currentResult?.data || [];
-  const hasRainfall = (current.method === "greenAmpt" || current.method === "modifiedGreenAmpt") && current.rainfallRate > 0;
+  const hasRainfall = comparisonMode 
+    ? scenarios.some(s => (s.method === "greenAmpt" || s.method === "modifiedGreenAmpt") && s.rainfallRate > 0)
+    : (current.method === "greenAmpt" || current.method === "modifiedGreenAmpt") && current.rainfallRate > 0;
 
   const renderParameterInputs = () => {
     const params = scenarios[activeScenarioIndex];
