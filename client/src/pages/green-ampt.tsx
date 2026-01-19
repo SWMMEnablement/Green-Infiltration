@@ -17,7 +17,10 @@ import {
   BarChart3,
   Printer,
   X,
-  ChevronDown
+  ChevronDown,
+  HelpCircle,
+  AlertTriangle,
+  Image
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import {
@@ -50,7 +53,70 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Tooltip as UITooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
+
+const parameterHelp = {
+  suctionHead: { 
+    label: "Suction Head (ψ)", 
+    description: "Capillary suction at wetting front",
+    ranges: { sand: "2-5", sandyLoam: "4-9", loam: "3-11", clay: "6-32" },
+    unit: "in"
+  },
+  conductivity: { 
+    label: "Saturated Hydraulic Conductivity (Ks)", 
+    description: "Rate water moves through saturated soil",
+    ranges: { sand: "4.6-9.4", sandyLoam: "0.4-2.4", loam: "0.1-0.8", clay: "0.01-0.06" },
+    unit: "in/hr"
+  },
+  initialDeficit: { 
+    label: "Initial Moisture Deficit (Δθ)", 
+    description: "Porosity minus initial moisture content. Represents available pore space.",
+    ranges: { sand: "0.30-0.40", sandyLoam: "0.25-0.35", loam: "0.25-0.35", clay: "0.15-0.25" },
+    unit: "fraction (0-1)"
+  },
+  saturatedContent: {
+    label: "Saturated Moisture Content (θs)",
+    description: "Soil porosity - maximum water content when fully saturated",
+    ranges: { sand: "0.35-0.45", loam: "0.40-0.50", clay: "0.45-0.55" },
+    unit: "fraction"
+  },
+  fieldCapacity: {
+    label: "Field Capacity (θfc)",
+    description: "Moisture content after gravity drainage (~2-3 days after saturation)",
+    ranges: { sand: "0.06-0.12", loam: "0.15-0.25", clay: "0.25-0.40" },
+    unit: "fraction"
+  },
+  curveNumber: {
+    label: "SCS Curve Number (CN)",
+    description: "Runoff potential index based on land use and soil type",
+    ranges: { "low runoff": "30-60", "moderate": "60-75", "high runoff": "75-90", "impervious": "90-98" },
+    unit: "dimensionless (30-100)"
+  },
+  maxRate: {
+    label: "Maximum Infiltration Rate (f₀)",
+    description: "Initial infiltration rate when soil is dry",
+    ranges: { sand: "5-10", loam: "1-4", clay: "0.1-1" },
+    unit: "in/hr"
+  },
+  minRate: {
+    label: "Minimum Infiltration Rate (fc)",
+    description: "Final steady-state infiltration (approaches Ks)",
+    ranges: { sand: "0.4-1.2", loam: "0.1-0.5", clay: "0.01-0.1" },
+    unit: "in/hr"
+  },
+  decayConstant: {
+    label: "Decay Constant (k)",
+    description: "Controls how fast infiltration decreases from f₀ to fc",
+    ranges: { typical: "2-6" },
+    unit: "1/hr"
+  }
+};
 
 type InfiltrationMethod = "greenAmpt" | "modifiedGreenAmpt" | "horton" | "curveNumber";
 type UnitSystem = "imperial" | "metric";
@@ -345,6 +411,82 @@ export default function GreenAmptPage() {
     window.print();
   };
 
+  const chartRef = useRef<HTMLDivElement>(null);
+  
+  const exportChartAsImage = () => {
+    if (!chartRef.current) return;
+    import('html2canvas').then(({ default: html2canvas }) => {
+      html2canvas(chartRef.current!, { backgroundColor: '#ffffff' }).then((canvas: HTMLCanvasElement) => {
+        const link = document.createElement('a');
+        link.download = `infiltration-chart-${Date.now()}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        toast({ title: "Exported", description: "Chart saved as PNG image." });
+      });
+    }).catch(() => {
+      toast({ title: "Error", description: "Could not export chart. Try using Print instead.", variant: "destructive" });
+    });
+  };
+
+  const getValidationWarnings = (params: ScenarioParams): string[] => {
+    const warnings: string[] = [];
+    if (params.method === "greenAmpt" || params.method === "modifiedGreenAmpt") {
+      if (params.initialDeficit > 0.5) warnings.push("Initial deficit > 0.5 is unusually high");
+      if (params.conductivity > 10) warnings.push("Conductivity > 10 in/hr suggests very coarse sand or gravel");
+      if (params.suctionHead > 40) warnings.push("Suction head > 40 in is unusually high for most soils");
+    }
+    if (params.method === "horton") {
+      if (params.maxRate > 15) warnings.push("Max rate > 15 in/hr is unusually high");
+      if (params.maxRate < params.minRate) warnings.push("Max rate should be greater than min rate");
+    }
+    if (params.method === "curveNumber") {
+      if (params.curveNumber < 40) warnings.push("CN < 40 represents extremely permeable surfaces");
+      if (params.curveNumber > 95) warnings.push("CN > 95 represents nearly impervious surfaces");
+    }
+    return warnings;
+  };
+
+  const generateSummaryStatement = (data: typeof currentData, params: ScenarioParams): string => {
+    if (!data.length) return "";
+    const conversionFactor = units === "imperial" ? 1 : 25.4;
+    const initial = (data[0]?.infiltrationRate || 0) * conversionFactor;
+    const final = (data[data.length - 1]?.infiltrationRate || 0) * conversionFactor;
+    const total = (data[data.length - 1]?.cumulativeInfiltration || 0) * conversionFactor;
+    const unitLabel = units === "imperial" ? "inches" : "mm";
+    const rateLabel = units === "imperial" ? "in/hr" : "mm/hr";
+    return `After ${params.duration} hours, approximately ${total.toFixed(2)} ${unitLabel} of water will infiltrate. The rate decreases from ${initial.toFixed(2)} to ${final.toFixed(2)} ${rateLabel}.`;
+  };
+
+  const ParameterTooltip = ({ helpKey }: { helpKey: keyof typeof parameterHelp }) => {
+    const help = parameterHelp[helpKey];
+    return (
+      <TooltipProvider>
+        <UITooltip>
+          <TooltipTrigger asChild>
+            <button type="button" className="ml-1 text-muted-foreground hover:text-foreground">
+              <HelpCircle className="h-3.5 w-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right" className="max-w-xs">
+            <p className="font-medium text-sm">{help.label}</p>
+            <p className="text-xs text-muted-foreground mt-1">{help.description}</p>
+            <div className="mt-2 text-xs">
+              <span className="font-medium">Typical ranges:</span>
+              <ul className="mt-1 space-y-0.5">
+                {Object.entries(help.ranges).map(([soil, range]) => (
+                  <li key={soil} className="flex justify-between">
+                    <span className="capitalize">{soil}:</span>
+                    <span className="font-mono">{range} {help.unit}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </TooltipContent>
+        </UITooltip>
+      </TooltipProvider>
+    );
+  };
+
   const current = scenarios[activeScenarioIndex];
   const currentData = calculatedData[activeScenarioIndex] || [];
 
@@ -358,7 +500,7 @@ export default function GreenAmptPage() {
         <>
           <div className="space-y-2">
             <Label className="text-sm font-medium flex items-center justify-between">
-              <span>Suction Head (ψ)</span>
+              <span className="flex items-center">Suction Head (ψ) <ParameterTooltip helpKey="suctionHead" /></span>
               <span className="text-xs text-muted-foreground font-mono">{lengthUnit}</span>
             </Label>
             <Input
@@ -373,7 +515,7 @@ export default function GreenAmptPage() {
           </div>
           <div className="space-y-2">
             <Label className="text-sm font-medium flex items-center justify-between">
-              <span>Conductivity (Ks)</span>
+              <span className="flex items-center">Conductivity (Ks) <ParameterTooltip helpKey="conductivity" /></span>
               <span className="text-xs text-muted-foreground font-mono">{rateUnit}</span>
             </Label>
             <Input
@@ -388,7 +530,7 @@ export default function GreenAmptPage() {
           </div>
           <div className="space-y-2">
             <Label className="text-sm font-medium flex items-center justify-between">
-              <span>Initial Deficit (θd)</span>
+              <span className="flex items-center">Initial Deficit (θd) <ParameterTooltip helpKey="initialDeficit" /></span>
               <span className="text-xs text-muted-foreground font-mono">fraction</span>
             </Label>
             <Input
@@ -405,11 +547,12 @@ export default function GreenAmptPage() {
           {params.method === "modifiedGreenAmpt" && (
             <>
               <div className="pt-3 border-t border-green-100">
-                <p className="text-xs font-medium text-green-700 mb-3">Redistribution Parameters</p>
+                <p className="text-xs font-medium text-green-700 mb-2">Redistribution Parameters</p>
+                <p className="text-xs text-muted-foreground mb-3">Models moisture recovery between rainfall events. Accounts for drainage from saturated to field capacity over time.</p>
               </div>
               <div className="space-y-2">
                 <Label className="text-sm font-medium flex items-center justify-between">
-                  <span>Saturated Content (θs)</span>
+                  <span className="flex items-center">Saturated Content (θs) <ParameterTooltip helpKey="saturatedContent" /></span>
                   <span className="text-xs text-muted-foreground font-mono">fraction</span>
                 </Label>
                 <Input
@@ -425,7 +568,7 @@ export default function GreenAmptPage() {
               </div>
               <div className="space-y-2">
                 <Label className="text-sm font-medium flex items-center justify-between">
-                  <span>Field Capacity (θfc)</span>
+                  <span className="flex items-center">Field Capacity (θfc) <ParameterTooltip helpKey="fieldCapacity" /></span>
                   <span className="text-xs text-muted-foreground font-mono">fraction</span>
                 </Label>
                 <Input
@@ -478,7 +621,7 @@ export default function GreenAmptPage() {
         <>
           <div className="space-y-2">
             <Label className="text-sm font-medium flex items-center justify-between">
-              <span>Maximum Rate (f₀)</span>
+              <span className="flex items-center">Maximum Rate (f₀) <ParameterTooltip helpKey="maxRate" /></span>
               <span className="text-xs text-muted-foreground font-mono">{rateUnit}</span>
             </Label>
             <Input
@@ -493,7 +636,7 @@ export default function GreenAmptPage() {
           </div>
           <div className="space-y-2">
             <Label className="text-sm font-medium flex items-center justify-between">
-              <span>Minimum Rate (fc)</span>
+              <span className="flex items-center">Minimum Rate (fc) <ParameterTooltip helpKey="minRate" /></span>
               <span className="text-xs text-muted-foreground font-mono">{rateUnit}</span>
             </Label>
             <Input
@@ -508,7 +651,7 @@ export default function GreenAmptPage() {
           </div>
           <div className="space-y-2">
             <Label className="text-sm font-medium flex items-center justify-between">
-              <span>Decay Constant (k)</span>
+              <span className="flex items-center">Decay Constant (k) <ParameterTooltip helpKey="decayConstant" /></span>
               <span className="text-xs text-muted-foreground font-mono">1/hr</span>
             </Label>
             <Input
@@ -531,7 +674,7 @@ export default function GreenAmptPage() {
         <>
           <div className="space-y-2">
             <Label className="text-sm font-medium flex items-center justify-between">
-              <span>Curve Number (CN)</span>
+              <span className="flex items-center">Curve Number (CN) <ParameterTooltip helpKey="curveNumber" /></span>
               <span className="text-xs text-muted-foreground font-mono">—</span>
             </Label>
             <Input
@@ -835,13 +978,24 @@ export default function GreenAmptPage() {
                     }
                   </CardDescription>
                 </div>
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button variant="outline" size="sm" className="gap-2 text-green-700 border-green-200 hover:bg-green-50 no-print">
-                      <TableIcon className="w-4 h-4" />
-                      View Data
-                    </Button>
-                  </DialogTrigger>
+                <div className="flex gap-2 no-print">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="gap-2 text-green-700 border-green-200 hover:bg-green-50"
+                    onClick={exportChartAsImage}
+                    data-testid="btn-export-chart"
+                  >
+                    <Image className="w-4 h-4" />
+                    Export
+                  </Button>
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" size="sm" className="gap-2 text-green-700 border-green-200 hover:bg-green-50">
+                        <TableIcon className="w-4 h-4" />
+                        View Data
+                      </Button>
+                    </DialogTrigger>
                   <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
                     <DialogHeader>
                       <DialogTitle>Calculation Data</DialogTitle>
@@ -891,11 +1045,12 @@ export default function GreenAmptPage() {
                         Copy to CSV
                       </Button>
                     </div>
-                  </DialogContent>
-                </Dialog>
+                    </DialogContent>
+                  </Dialog>
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="h-80">
+                <div className="h-80" ref={chartRef}>
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -971,6 +1126,26 @@ export default function GreenAmptPage() {
                   } <span className="text-sm font-normal">{getUnitLabel("length", units)}</span>
                 </p>
               </div>
+            </div>
+
+            {getValidationWarnings(current).length > 0 && (
+              <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
+                <p className="text-sm font-medium text-amber-800 flex items-center gap-2 mb-2">
+                  <AlertTriangle className="w-4 h-4" />
+                  Parameter Warnings
+                </p>
+                <ul className="text-xs text-amber-700 space-y-1">
+                  {getValidationWarnings(current).map((warning, idx) => (
+                    <li key={idx}>• {warning}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="p-4 rounded-xl bg-blue-50 border border-blue-200">
+              <p className="text-sm text-blue-800" data-testid="result-summary">
+                {generateSummaryStatement(currentData, current)}
+              </p>
             </div>
 
             <Card className="border-green-200/60 shadow-lg shadow-green-500/5">
