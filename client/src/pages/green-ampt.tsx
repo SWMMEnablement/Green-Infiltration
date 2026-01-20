@@ -270,11 +270,13 @@ interface InfiltrationResult {
   timeToPonding?: number;
   totalRunoff: number;
   totalInfiltration: number;
+  totalRainfall: number;
 }
 
 function calculateInfiltration(params: ScenarioParams, timestep: number = 0.1): InfiltrationResult {
   const data: InfiltrationDataPoint[] = [];
   let totalRunoff = 0;
+  let cumulativeRainfall = 0;
   let timeToPonding: number | undefined;
   
   if (params.method === "greenAmpt") {
@@ -285,9 +287,10 @@ function calculateInfiltration(params: ScenarioParams, timestep: number = 0.1): 
       const rainfall = params.rainfallRate > 0 
         ? getRainfallAtTime(params.rainfallRate, time, params.duration, params.rainfallDistribution)
         : 0;
+      cumulativeRainfall += rainfall * timestep;
       const potentialRate = params.conductivity * (1 + (params.suctionHead * params.initialDeficit) / F);
       const actualRate = rainfall > 0 ? Math.min(potentialRate, rainfall) : potentialRate;
-      const runoffRate = rainfall > 0 ? Math.max(0, rainfall - potentialRate) : 0;
+      const runoffRate = rainfall > 0 ? Math.max(0, rainfall - actualRate) : 0;
       F += actualRate * timestep;
       cumulativeRunoff += runoffRate * timestep;
       if (timeToPonding === undefined && rainfall > 0 && rainfall > potentialRate) {
@@ -313,11 +316,12 @@ function calculateInfiltration(params: ScenarioParams, timestep: number = 0.1): 
       const rainfall = params.rainfallRate > 0 
         ? getRainfallAtTime(params.rainfallRate, time, params.duration, params.rainfallDistribution)
         : 0;
+      cumulativeRainfall += rainfall * timestep;
       const redistributionFactor = Math.exp(-time / Math.max(params.redistributionTime, 0.1));
       const effectiveDeficit = params.initialDeficit * (1 - redistributionFactor * 0.3);
       const potentialRate = params.conductivity * (1 + (params.suctionHead * effectiveDeficit) / F);
       const actualRate = rainfall > 0 ? Math.min(potentialRate, rainfall) : potentialRate;
-      const runoffRate = rainfall > 0 ? Math.max(0, rainfall - potentialRate) : 0;
+      const runoffRate = rainfall > 0 ? Math.max(0, rainfall - actualRate) : 0;
       cumulativeRunoff += runoffRate * timestep;
       if (timeToPonding === undefined && rainfall > 0 && rainfall > potentialRate) {
         timeToPonding = time;
@@ -368,7 +372,7 @@ function calculateInfiltration(params: ScenarioParams, timestep: number = 0.1): 
   }
   
   const totalInfiltration = data.length > 0 ? data[data.length - 1].cumulativeInfiltration : 0;
-  return { data, timeToPonding, totalRunoff, totalInfiltration };
+  return { data, timeToPonding, totalRunoff, totalInfiltration, totalRainfall: cumulativeRainfall };
 }
 
 function getRainfallAtTime(peakRate: number, time: number, duration: number, distribution: RainfallDistribution): number {
@@ -1867,14 +1871,17 @@ function scsCurveNumber(CN, P) {
                     </TableHeader>
                     <TableBody>
                       {(() => {
-                        const rainfallRate = 'rainfallRate' in current ? (current as any).rainfallRate : 0;
-                        const totalRainfall = rainfallRate * current.duration;
+                        const totalRainfall = currentResult.totalRainfall;
                         const totalInfiltration = currentResult.totalInfiltration;
                         const totalRunoff = currentResult.totalRunoff;
-                        const remainingAbstraction = Math.max(0, totalRainfall - totalInfiltration - totalRunoff);
+                        const massBalanceError = Math.abs(totalRainfall - totalInfiltration - totalRunoff);
+                        const balanceOk = massBalanceError < 0.01 || totalRainfall === 0;
                         
                         const convertDepth = (val: number) => units === "imperial" ? val : val * 25.4;
                         const pctOf = (val: number) => totalRainfall > 0 ? ((val / totalRainfall) * 100).toFixed(1) : "0.0";
+                        
+                        const balanceSum = totalInfiltration + totalRunoff;
+                        const balancePct = totalRainfall > 0 ? (balanceSum / totalRainfall) * 100 : 100;
                         
                         return (
                           <>
@@ -1893,20 +1900,20 @@ function scsCurveNumber(CN, P) {
                               <TableCell className="text-right font-mono">{convertDepth(totalRunoff).toFixed(3)}</TableCell>
                               <TableCell className="text-right font-mono">{pctOf(totalRunoff)}%</TableCell>
                             </TableRow>
-                            {remainingAbstraction > 0.0001 && (
-                              <TableRow>
-                                <TableCell className="font-medium text-amber-700">Other Abstractions</TableCell>
-                                <TableCell className="text-right font-mono">{convertDepth(remainingAbstraction).toFixed(3)}</TableCell>
-                                <TableCell className="text-right font-mono">{pctOf(remainingAbstraction)}%</TableCell>
-                              </TableRow>
-                            )}
-                            <TableRow className="border-t-2 border-gray-300 bg-gray-50">
-                              <TableCell className="font-semibold">Balance Check</TableCell>
-                              <TableCell className="text-right font-mono font-semibold">
-                                {convertDepth(totalInfiltration + totalRunoff + remainingAbstraction).toFixed(3)}
+                            <TableRow className={`border-t-2 ${balanceOk ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'}`}>
+                              <TableCell className="font-semibold flex items-center gap-2">
+                                Mass Balance
+                                {balanceOk ? (
+                                  <span className="text-green-600 text-xs">✓ Verified</span>
+                                ) : (
+                                  <span className="text-red-600 text-xs">⚠ Error</span>
+                                )}
                               </TableCell>
                               <TableCell className="text-right font-mono font-semibold">
-                                {pctOf(totalInfiltration + totalRunoff + remainingAbstraction)}%
+                                {convertDepth(balanceSum).toFixed(3)}
+                              </TableCell>
+                              <TableCell className={`text-right font-mono font-semibold ${balanceOk ? 'text-green-700' : 'text-red-700'}`}>
+                                {balancePct.toFixed(1)}%
                               </TableCell>
                             </TableRow>
                           </>

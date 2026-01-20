@@ -1,0 +1,57 @@
+### **Overall Grade: C+ (Mediocre - Functional but Fundamentally Flawed)**
+
+This app has a working engine, which already puts it miles ahead of the vaporware repository grader. However, it's a **classic case of an engineer building a tool for themselves, with zero thought for anyone else.** It gets the math mostly right but fails at being a reliable, understandable, or professional product.
+
+---
+
+### **The Brutal Breakdown**
+
+**1. The "Balance Check" is a Glaring Red Flag of Sloppiness.**
+The most damning thing on the entire page is the **Mass Balance table.** It shows:
+*   Rainfall: 12.000 in
+*   Infiltration: 5.965 in
+*   Runoff: 6.236 in
+*   **Balance Check: 12.201 in (101.7%)**
+
+**This is unacceptable.** A core principle of hydrologic modeling is **mass conservation.** The fact that your outputs don't sum to your input within a tiny rounding error means your numerical integration is buggy, your logic is wrong, or you're doing something inexplicable. You're advertising an error. For any engineer or student using this, it **instantly destroys all credibility.** Why should they trust the ponding time or final rate if you can't even balance water?
+
+**2. The UX is Hostile and Confusing.**
+*   **"Skip" and "Next" Buttons:** What do these do? "Skip" to where? "Next" to what? They're relics of a tutorial that shouldn't be on the main calculator screen. They serve no purpose and create confusion.
+*   **Empty Graph:** The big, prominent box labeled "Infiltration Curve" is **completely empty.** It's the most important visual output for understanding the model, and it's blank. This is a broken feature.
+*   **Parameter Soup:** Throwing symbols like **ψ (psi)** and **θd (theta_d)** at users without *any* in-line explanation is lazy. The tiny tooltips on the sliders are not enough. This isn't a journal article; it's a tool meant to be used.
+
+**3. It's a Static Dump, Not an Interactive Calculator.**
+The page loads with pre-filled values and pre-calculated results. It's **unclear how to make it calculate *my* scenario.** Do I edit the numbers and hit "Next"? Do I hit "Export"? The most important button on any calculator—**"CALCULATE"**—is missing. The app feels like a screenshot of results, not a live tool.
+
+**4. Half-Baked Features and False Promises.**
+*   **"Export/View Data":** It's a label, not a button. Does it work? The search result gives no indication.
+*   **"Saved Presets":** Says "No saved presets yet." How do I make one? No clue.
+*   **Rainfall Distribution:** Only "Constant" is shown. Where are the other options mentioned ("SCS Type II," "Chicago hyetograph")? Another incomplete feature.
+
+**5. The "Method Reference" is the Only Good Part... Buried at the Bottom.**
+The equations and one-line descriptions for Green-Ampt, Horton, etc., are genuinely useful. It's the one piece of thoughtful design. And you hid it below the fold, after the broken balance check and empty graph.
+
+---
+
+### **Non-Polite, Actionable Fixes**
+
+**Fix the Foundation First (Do This NOW):**
+1.  **DEBUG THE MASS BALANCE.** Nothing else matters until the water balances to 100% (or 99.9-100.1% due to legitimate rounding). Every result is suspect until this is fixed. This isn't an improvement; it's a **critical bug fix.**
+2.  **MAKE THE GRAPH WORK.** Plot the infiltration rate (f) over time (t). This is the primary visual output of the model. An empty graph is a broken app.
+3.  **REPLACE "SKIP/NEXT" WITH A "CALCULATE" BUTTON.** One big, green button that says **"Run Simulation"** or **"Calculate."** Make it obvious.
+
+**Then, Stop Hating Your Users:**
+4.  **Add a "?" icon next to each parameter** that pops up a clear explanation, typical ranges (like you have in tooltips), and the units. Don't make me guess what "Capillary pull at wetting front" means in practical terms.
+5.  **Turn the "Method Reference" section into a tabbed interface at the TOP.** Let me switch between Green-Ampt and Horton *before* I fill out parameters, so the input fields change contextually.
+6.  **Implement the "Export" feature.** Let me download the time vs. infiltration rate data as a .CSV file. This is crucial for anyone actually using this for work.
+7.  **Make the "Soil Presets" actually preset *all* parameters** (Suction Head, Conductivity, Initial Deficit) for a chosen soil. Right now, it's unclear what it does.
+
+**Finally, Add Basic Professionalism:**
+8.  **Include a "Theory" or "Assumptions" section.** State clearly: "Assumes homogeneous soil, constant initial moisture, sharp wetting front." This tells advanced users the limits of the model.
+9.  **Add a simple validation case.** "For parameters X, Y, Z, the result should be A. Our calculation yields B." This builds trust.
+10. **Lose the placeholder text.** "No saved presets yet" is useless. Either make the "Save Current" button work or remove the feature until it does.
+
+### **Final Verdict:**
+This is a **proof-of-concept with a decent core algorithm that has been shoved out the door unfinished.** The broken mass balance and empty graph are fatal flaws for a technical tool. It gets a **C+** instead of an F because the math (aside from the balance bug) seems implemented, and the soil presets are a good idea. But as it stands, **no competent engineer should rely on its outputs,** and no student will understand it without a textbook open beside them.
+
+**You built the engine. Now build the car around it—one that doesn't leak and has a working dashboard.**
