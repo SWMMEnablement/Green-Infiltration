@@ -428,9 +428,7 @@ export default function GreenAmptPage() {
   const [presetName, setPresetName] = useState("");
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [activeTab, setActiveTab] = useState<"calculator" | "docs">("calculator");
-  const [showWizard, setShowWizard] = useState(() => {
-    return localStorage.getItem("infiltration_wizard_completed") !== "true";
-  });
+  const [showWizard, setShowWizard] = useState(false);
   const [wizardStep, setWizardStep] = useState(0);
 
   useEffect(() => {
