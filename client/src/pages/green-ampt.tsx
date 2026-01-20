@@ -723,7 +723,7 @@ export default function GreenAmptPage() {
               <HelpCircle className="h-3.5 w-3.5" />
             </button>
           </TooltipTrigger>
-          <TooltipContent side="right" className="max-w-sm p-3">
+          <TooltipContent side="right" className="max-w-sm p-3 bg-blue-50 border-blue-200">
             <p className="font-bold text-sm">{help.label}</p>
             <p className="text-xs text-muted-foreground mt-1">{help.description}</p>
             {'tip' in help && (
@@ -1765,7 +1765,7 @@ function scsCurveNumber(CN, P) {
                         reversed
                       />
                       <Tooltip 
-                        contentStyle={{ backgroundColor: 'white', border: '1px solid #d1fae5', borderRadius: '8px', fontSize: '12px' }}
+                        contentStyle={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', fontSize: '12px' }}
                         formatter={(value: number, name: string) => [
                           `${(units === "imperial" ? value : value * 25.4).toFixed(4)} ${getUnitLabel("rate", units)}`,
                           name
@@ -1934,7 +1934,7 @@ function scsCurveNumber(CN, P) {
                       </p>
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
+                  <TooltipContent className="max-w-xs bg-blue-50 border-blue-200">
                     <p>The infiltration rate at the start of the simulation when the soil is driest and can absorb water fastest.</p>
                   </TooltipContent>
                 </UITooltip>
@@ -1954,7 +1954,7 @@ function scsCurveNumber(CN, P) {
                       </p>
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
+                  <TooltipContent className="max-w-xs bg-blue-50 border-blue-200">
                     <p>The infiltration rate at the end of the simulation. As soil becomes saturated, this rate approaches the hydraulic conductivity.</p>
                   </TooltipContent>
                 </UITooltip>
@@ -1972,7 +1972,7 @@ function scsCurveNumber(CN, P) {
                       </p>
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
+                  <TooltipContent className="max-w-xs bg-blue-50 border-blue-200">
                     <p>The total depth of water that has infiltrated into the soil over the entire simulation period.</p>
                   </TooltipContent>
                 </UITooltip>
@@ -1991,7 +1991,7 @@ function scsCurveNumber(CN, P) {
                         </p>
                       </div>
                     </TooltipTrigger>
-                    <TooltipContent className="max-w-xs">
+                    <TooltipContent className="max-w-xs bg-blue-50 border-blue-200">
                       <p>The constant rainfall intensity applied during the simulation.</p>
                     </TooltipContent>
                   </UITooltip>
@@ -2009,7 +2009,7 @@ function scsCurveNumber(CN, P) {
                         </p>
                       </div>
                     </TooltipTrigger>
-                    <TooltipContent className="max-w-xs">
+                    <TooltipContent className="max-w-xs bg-blue-50 border-blue-200">
                       <p>The time when rainfall intensity exceeds infiltration capacity and water begins pooling on the surface.</p>
                     </TooltipContent>
                   </UITooltip>
@@ -2024,7 +2024,7 @@ function scsCurveNumber(CN, P) {
                         </p>
                       </div>
                     </TooltipTrigger>
-                    <TooltipContent className="max-w-xs">
+                    <TooltipContent className="max-w-xs bg-blue-50 border-blue-200">
                       <p>The total depth of water that runs off the surface when rainfall exceeds infiltration capacity.</p>
                     </TooltipContent>
                   </UITooltip>
