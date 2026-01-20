@@ -67,57 +67,94 @@ import { useToast } from "@/hooks/use-toast";
 const parameterHelp = {
   suctionHead: { 
     label: "Suction Head (ψ)", 
-    description: "Capillary suction at wetting front",
+    description: "The capillary pressure that pulls water into dry soil at the wetting front. Higher values mean stronger suction (typical in fine-grained soils like clay). This is a key driver of early-stage infiltration.",
+    tip: "Use soil survey data or SWMM5 defaults. Sandy soils: 2-5 in, Clays: 6-32 in.",
     ranges: { sand: "2-5", sandyLoam: "4-9", loam: "3-11", clay: "6-32" },
     unit: "in"
   },
   conductivity: { 
     label: "Saturated Hydraulic Conductivity (Ks)", 
-    description: "Rate water moves through saturated soil",
+    description: "How fast water moves through soil when fully saturated. This becomes the limiting infiltration rate after the soil wets up. Sand drains fast (high K), clay drains slowly (low K).",
+    tip: "Critical parameter! Get from soil tests, USDA soil surveys, or use the soil presets above.",
     ranges: { sand: "4.6-9.4", sandyLoam: "0.4-2.4", loam: "0.1-0.8", clay: "0.01-0.06" },
     unit: "in/hr"
   },
   initialDeficit: { 
     label: "Initial Moisture Deficit (Δθ)", 
-    description: "Porosity minus initial moisture content. Represents available pore space.",
+    description: "The empty pore space available to store water, calculated as (porosity - current moisture). Dry soil = high deficit = more initial storage. Wet soil = low deficit = less storage before runoff.",
+    tip: "For dry antecedent conditions use 0.3-0.4. For wet conditions use 0.1-0.2.",
     ranges: { sand: "0.30-0.40", sandyLoam: "0.25-0.35", loam: "0.25-0.35", clay: "0.15-0.25" },
     unit: "fraction (0-1)"
   },
   saturatedContent: {
     label: "Saturated Moisture Content (θs)",
-    description: "Soil porosity - maximum water content when fully saturated",
+    description: "Total porosity of the soil - the maximum possible water content when all pores are filled. Equals the soil's porosity. Coarse soils have lower porosity than fine soils.",
+    tip: "Usually 0.35-0.50 for most soils. Can measure from soil core samples.",
     ranges: { sand: "0.35-0.45", loam: "0.40-0.50", clay: "0.45-0.55" },
     unit: "fraction"
   },
   fieldCapacity: {
     label: "Field Capacity (θfc)",
-    description: "Moisture content after gravity drainage (~2-3 days after saturation)",
+    description: "Moisture content 2-3 days after saturation, when gravity drainage stops. Water above this drains; water below is held by capillary forces. Used in redistribution calculations.",
+    tip: "Key threshold for moisture recovery between storms.",
     ranges: { sand: "0.06-0.12", loam: "0.15-0.25", clay: "0.25-0.40" },
     unit: "fraction"
   },
+  wiltingPoint: {
+    label: "Wilting Point (θwp)",
+    description: "Minimum soil moisture plants can extract. Below this, water is held too tightly by soil particles. Represents the driest condition in redistribution modeling.",
+    tip: "Typically 40-60% of field capacity for most soils.",
+    ranges: { sand: "0.02-0.06", loam: "0.08-0.12", clay: "0.15-0.22" },
+    unit: "fraction"
+  },
+  redistributionTime: {
+    label: "Redistribution Time (τ)",
+    description: "Time constant controlling how fast the soil drains from saturation toward field capacity between storms. Shorter times mean faster recovery of infiltration capacity.",
+    tip: "Typical values: 2-6 hours. Use longer times for clay, shorter for sand.",
+    ranges: { sand: "1-3", loam: "2-4", clay: "4-8" },
+    unit: "hours"
+  },
   curveNumber: {
     label: "SCS Curve Number (CN)",
-    description: "Runoff potential index based on land use and soil type",
-    ranges: { "low runoff": "30-60", "moderate": "60-75", "high runoff": "75-90", "impervious": "90-98" },
+    description: "A runoff index (30-98) that combines soil type and land use into one number. Higher CN = more runoff. Woods on sandy soil might be CN=30; parking lot on clay might be CN=98.",
+    tip: "Look up in TR-55 tables based on your land use and hydrologic soil group (A-D).",
+    ranges: { "woods/forest": "30-55", "pasture/lawn": "55-75", "residential": "70-85", "commercial": "85-95" },
     unit: "dimensionless (30-100)"
   },
   maxRate: {
     label: "Maximum Infiltration Rate (f₀)",
-    description: "Initial infiltration rate when soil is dry",
+    description: "Infiltration rate at time zero when soil is driest. This is the peak capacity before the soil starts to wet up. Should be much higher than the minimum rate.",
+    tip: "Typically 2-5x the minimum rate. Higher for dry antecedent conditions.",
     ranges: { sand: "5-10", loam: "1-4", clay: "0.1-1" },
     unit: "in/hr"
   },
   minRate: {
     label: "Minimum Infiltration Rate (fc)",
-    description: "Final steady-state infiltration (approaches Ks)",
+    description: "The final steady-state infiltration rate after soil is fully wetted. Approximately equals the saturated hydraulic conductivity (Ks). Infiltration can't go below this.",
+    tip: "Should approximate Ks. This is your long-term infiltration rate.",
     ranges: { sand: "0.4-1.2", loam: "0.1-0.5", clay: "0.01-0.1" },
     unit: "in/hr"
   },
   decayConstant: {
     label: "Decay Constant (k)",
-    description: "Controls how fast infiltration decreases from f₀ to fc",
-    ranges: { typical: "2-6" },
+    description: "Controls how quickly infiltration drops from the maximum to minimum rate. Higher k = faster decay. Typical range is 2-6 per hour.",
+    tip: "Calibrate to observed data if available. Default of 4/hr works for many soils.",
+    ranges: { fast: "4-6", typical: "2-4", slow: "1-2" },
     unit: "1/hr"
+  },
+  duration: {
+    label: "Simulation Duration",
+    description: "Total time to simulate infiltration. For design storms, match your rainfall duration. For continuous simulation, use longer periods.",
+    tip: "Typical design storms: 1-6 hours. Long-term: 24-72 hours.",
+    ranges: { "short storm": "1-2", "design storm": "2-6", "long event": "12-24" },
+    unit: "hours"
+  },
+  rainfallRate: {
+    label: "Rainfall Intensity",
+    description: "Average or peak rainfall rate. When set, the model calculates actual infiltration (limited by rainfall) and generates runoff when rainfall exceeds capacity.",
+    tip: "Set to 0 to see potential infiltration only. Use local IDF curves for design storms.",
+    ranges: { "light rain": "0.1-0.3", "moderate": "0.3-1.0", "heavy": "1-3", "extreme": "3+" },
+    unit: "in/hr"
   }
 };
 
@@ -686,16 +723,21 @@ export default function GreenAmptPage() {
               <HelpCircle className="h-3.5 w-3.5" />
             </button>
           </TooltipTrigger>
-          <TooltipContent side="right" className="max-w-xs">
-            <p className="font-medium text-sm">{help.label}</p>
+          <TooltipContent side="right" className="max-w-sm p-3">
+            <p className="font-bold text-sm">{help.label}</p>
             <p className="text-xs text-muted-foreground mt-1">{help.description}</p>
+            {'tip' in help && (
+              <p className="text-xs text-blue-600 mt-2 p-2 bg-blue-50 rounded border border-blue-100">
+                <strong>Tip:</strong> {help.tip}
+              </p>
+            )}
             <div className="mt-2 text-xs">
-              <span className="font-medium">Typical ranges:</span>
+              <span className="font-bold">Typical ranges:</span>
               <ul className="mt-1 space-y-0.5">
                 {Object.entries(help.ranges).map(([soil, range]) => (
-                  <li key={soil} className="flex justify-between">
-                    <span className="capitalize">{soil}:</span>
-                    <span className="font-mono">{range} {help.unit}</span>
+                  <li key={soil} className="flex justify-between gap-4">
+                    <span className="capitalize text-gray-600">{soil}:</span>
+                    <span className="font-mono font-medium">{range} {help.unit}</span>
                   </li>
                 ))}
               </ul>
@@ -735,6 +777,7 @@ export default function GreenAmptPage() {
               className="font-mono border-green-200"
               data-testid="input-suction"
             />
+            <p className="text-xs text-muted-foreground">Capillary pull at wetting front. Sand: 2-5, Loam: 3-11, Clay: 6-32</p>
           </div>
           <div className="space-y-2">
             <Label className="text-sm font-medium flex items-center justify-between">
@@ -750,6 +793,7 @@ export default function GreenAmptPage() {
               className="font-mono border-green-200"
               data-testid="input-conductivity"
             />
+            <p className="text-xs text-muted-foreground">How fast water moves through saturated soil. Sand: 4-9, Loam: 0.1-0.8, Clay: 0.01-0.06</p>
           </div>
           <div className="space-y-2">
             <Label className="text-sm font-medium flex items-center justify-between">
@@ -766,10 +810,11 @@ export default function GreenAmptPage() {
               className="font-mono border-green-200"
               data-testid="input-deficit"
             />
+            <p className="text-xs text-muted-foreground">Empty pore space available. Dry soil: 0.3-0.4, Wet soil: 0.1-0.2</p>
           </div>
           <div className="space-y-2">
             <Label className="text-sm font-medium flex items-center justify-between">
-              <span>Rainfall Intensity</span>
+              <span className="flex items-center">Rainfall Intensity <ParameterTooltip helpKey="rainfallRate" /></span>
               <span className="text-xs text-muted-foreground font-mono">{rateUnit}</span>
             </Label>
             <Input
@@ -781,7 +826,7 @@ export default function GreenAmptPage() {
               className="font-mono border-blue-200"
               data-testid="input-rainfall-rate"
             />
-            <p className="text-xs text-muted-foreground">Set to 0 for potential infiltration only (no runoff calculation)</p>
+            <p className="text-xs text-muted-foreground">Set to 0 for potential infiltration curve. Light: 0.1-0.3, Moderate: 0.3-1.0, Heavy: 1-3+</p>
           </div>
           {params.rainfallRate > 0 && (
             <div className="space-y-2">
@@ -901,6 +946,7 @@ export default function GreenAmptPage() {
               className="font-mono border-orange-200"
               data-testid="input-maxrate"
             />
+            <p className="text-xs text-muted-foreground">Initial rate when soil is dry. Sand: 5-10, Loam: 1-4, Clay: 0.1-1</p>
           </div>
           <div className="space-y-2">
             <Label className="text-sm font-medium flex items-center justify-between">
@@ -916,6 +962,7 @@ export default function GreenAmptPage() {
               className="font-mono border-orange-200"
               data-testid="input-minrate"
             />
+            <p className="text-xs text-muted-foreground">Final steady-state rate (≈ Ks). Sand: 0.4-1.2, Loam: 0.1-0.5, Clay: 0.01-0.1</p>
           </div>
           <div className="space-y-2">
             <Label className="text-sm font-medium flex items-center justify-between">
@@ -931,9 +978,11 @@ export default function GreenAmptPage() {
               className="font-mono border-orange-200"
               data-testid="input-decay"
             />
+            <p className="text-xs text-muted-foreground">How fast infiltration decays. Typical: 2-6 per hour</p>
           </div>
           <div className="pt-3 p-3 bg-orange-50 rounded-lg border border-orange-200">
-            <p className="text-xs text-orange-700 font-mono">f = fc + (f₀ - fc) × e^(-kt)</p>
+            <p className="text-xs text-orange-800 font-medium mb-1">Horton Equation (SWMM5):</p>
+            <p className="text-xs text-orange-700 font-mono">f(t) = fc + (f₀ - fc) × e^(-k×t)</p>
           </div>
         </>
       );
@@ -955,6 +1004,7 @@ export default function GreenAmptPage() {
               className="font-mono border-purple-200"
               data-testid="input-cn"
             />
+            <p className="text-xs text-muted-foreground">Woods: 30-55, Pasture: 55-75, Residential: 70-85, Commercial: 85-95</p>
           </div>
           <div className="space-y-2">
             <Label className="text-sm font-medium flex items-center justify-between">
@@ -970,6 +1020,7 @@ export default function GreenAmptPage() {
               className="font-mono border-purple-200"
               data-testid="input-rainfall"
             />
+            <p className="text-xs text-muted-foreground">Total storm depth. Get from local rainfall data or IDF curves</p>
           </div>
           <div className="space-y-2">
             <Label className="text-sm font-medium flex items-center justify-between">
@@ -986,10 +1037,12 @@ export default function GreenAmptPage() {
               className="font-mono border-purple-200"
               data-testid="input-ia"
             />
+            <p className="text-xs text-muted-foreground">Standard: 0.2 (original SCS), Modern studies suggest 0.05</p>
           </div>
           <div className="pt-3 p-3 bg-purple-50 rounded-lg border border-purple-200">
+            <p className="text-xs text-purple-800 font-medium mb-1">SCS Curve Number Equation (TR-55):</p>
             <p className="text-xs text-purple-700 font-mono">Q = (P - Ia)² / (P - Ia + S)</p>
-            <p className="text-xs text-purple-600 mt-1">where S = 1000/CN - 10</p>
+            <p className="text-xs text-purple-600 mt-1">where S = 1000/CN - 10, Ia = 0.2×S</p>
           </div>
         </>
       );
