@@ -1632,6 +1632,7 @@ where:
                         yAxisId="left"
                         tick={{ fontSize: 12 }} 
                         tickLine={false}
+                        domain={[0, 'auto']}
                         label={{ value: `Rate (${getUnitLabel("rate", units)})`, angle: -90, position: 'insideLeft', fontSize: 12 }}
                       />
                       <YAxis 
