@@ -21,10 +21,9 @@ import {
   HelpCircle,
   AlertTriangle,
   Image,
-  Sparkles,
-  ArrowRight,
-  CheckCircle2,
-  Lightbulb
+  Lightbulb,
+  Copy,
+  FileText
 } from "lucide-react";
 import { ComposedChart, LineChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine, Area } from "recharts";
 import {
@@ -513,8 +512,6 @@ export default function GreenAmptPage() {
   const [presetName, setPresetName] = useState("");
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [activeTab, setActiveTab] = useState<"calculator" | "docs">("calculator");
-  const [showWizard, setShowWizard] = useState(false);
-  const [wizardStep, setWizardStep] = useState(0);
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -759,6 +756,75 @@ export default function GreenAmptPage() {
       }
     }
     return summary;
+  };
+
+  const generateReport = () => {
+    const params = current;
+    const result = currentResult;
+    const conversionFactor = units === "imperial" ? 1 : 25.4;
+    const unitLabel = units === "imperial" ? "in" : "mm";
+    const rateLabel = units === "imperial" ? "in/hr" : "mm/hr";
+    
+    let report = `INFILTRATION ANALYSIS REPORT\n`;
+    report += `${"=".repeat(40)}\n\n`;
+    report += `Method: ${methodLabels[params.method]}\n`;
+    report += `Duration: ${params.duration} hours\n`;
+    report += `Units: ${units === "imperial" ? "USA (inches)" : "Metric (mm)"}\n\n`;
+    
+    report += `INPUT PARAMETERS\n`;
+    report += `${"-".repeat(20)}\n`;
+    
+    if (params.method === "greenAmpt" || params.method === "modifiedGreenAmpt") {
+      report += `Suction Head (ψ): ${(params.suctionHead * conversionFactor).toFixed(2)} ${unitLabel}\n`;
+      report += `Conductivity (Ks): ${(params.conductivity * conversionFactor).toFixed(3)} ${rateLabel}\n`;
+      report += `Initial Deficit (θd): ${params.initialDeficit.toFixed(2)}\n`;
+      if (params.rainfallRate > 0) {
+        report += `Rainfall Rate: ${(params.rainfallRate * conversionFactor).toFixed(2)} ${rateLabel}\n`;
+        report += `Distribution: ${params.rainfallDistribution || "constant"}\n`;
+      }
+    } else if (params.method === "horton") {
+      report += `Max Rate (f₀): ${(params.maxRate * conversionFactor).toFixed(2)} ${rateLabel}\n`;
+      report += `Min Rate (fc): ${(params.minRate * conversionFactor).toFixed(2)} ${rateLabel}\n`;
+      report += `Decay Constant (k): ${params.decayConstant.toFixed(2)} /hr\n`;
+    } else if (params.method === "curveNumber") {
+      report += `Curve Number (CN): ${params.curveNumber}\n`;
+      report += `Total Rainfall: ${(params.rainfall * conversionFactor).toFixed(2)} ${unitLabel}\n`;
+    }
+    
+    report += `\nKEY RESULTS\n`;
+    report += `${"-".repeat(20)}\n`;
+    
+    const initial = (currentData[0]?.actualInfiltrationRate || 0) * conversionFactor;
+    const final = (currentData[currentData.length - 1]?.actualInfiltrationRate || 0) * conversionFactor;
+    const total = (currentData[currentData.length - 1]?.cumulativeInfiltration || 0) * conversionFactor;
+    
+    report += `Initial Rate: ${initial.toFixed(3)} ${rateLabel}\n`;
+    report += `Final Rate: ${final.toFixed(3)} ${rateLabel}\n`;
+    report += `Total Infiltration: ${total.toFixed(3)} ${unitLabel}\n`;
+    
+    if (result?.timeToPonding !== undefined) {
+      report += `Time to Ponding: ${result.timeToPonding.toFixed(2)} hours\n`;
+    }
+    if (result?.totalRunoff && result.totalRunoff > 0) {
+      report += `Total Runoff: ${(result.totalRunoff * conversionFactor).toFixed(3)} ${unitLabel}\n`;
+    }
+    
+    report += `\nINTERPRETATION\n`;
+    report += `${"-".repeat(20)}\n`;
+    report += generateSummaryStatement(currentData, params, result);
+    report += `\n\nGenerated: ${new Date().toLocaleString()}`;
+    
+    return report;
+  };
+
+  const copyResults = async () => {
+    const report = generateReport();
+    try {
+      await navigator.clipboard.writeText(report);
+      toast({ title: "Copied!", description: "Results copied to clipboard." });
+    } catch (e) {
+      toast({ title: "Error", description: "Failed to copy to clipboard.", variant: "destructive" });
+    }
   };
 
   const ParameterTooltip = ({ helpKey }: { helpKey: keyof typeof parameterHelp }) => {
@@ -1181,107 +1247,6 @@ export default function GreenAmptPage() {
           </div>
         </div>
       </header>
-
-      {/* Getting Started Wizard */}
-      {showWizard && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <Card className="w-full max-w-lg bg-white shadow-2xl">
-            <CardHeader className="text-center pb-2">
-              <div className="mx-auto p-3 rounded-full bg-green-100 w-fit mb-2">
-                <Sparkles className="w-8 h-8 text-green-600" />
-              </div>
-              <CardTitle className="text-xl">Welcome to Infiltration Calculator</CardTitle>
-              <CardDescription>Let's get you started with SWMM5 infiltration modeling</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {wizardStep === 0 && (
-                <div className="space-y-4">
-                  <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                    <h3 className="font-medium text-green-800 mb-2">Choose an Infiltration Method</h3>
-                    <p className="text-sm text-green-700">Start by selecting a method that matches your soil data and project requirements:</p>
-                    <ul className="mt-2 space-y-1 text-sm text-green-700">
-                      <li><strong>Green-Ampt:</strong> Best for detailed physical soil parameters</li>
-                      <li><strong>Horton:</strong> Simple empirical approach with decay curve</li>
-                      <li><strong>SCS Curve Number:</strong> Quick estimates based on land use</li>
-                    </ul>
-                  </div>
-                </div>
-              )}
-              {wizardStep === 1 && (
-                <div className="space-y-4">
-                  <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                    <h3 className="font-medium text-blue-800 mb-2">Set Your Parameters</h3>
-                    <p className="text-sm text-blue-700">Use the soil type presets for quick setup, or enter custom values:</p>
-                    <ul className="mt-2 space-y-1 text-sm text-blue-700">
-                      <li><CheckCircle2 className="w-4 h-4 inline mr-1" />Hover over parameters for guidance</li>
-                      <li><CheckCircle2 className="w-4 h-4 inline mr-1" />Add rainfall rate to calculate actual infiltration</li>
-                      <li><CheckCircle2 className="w-4 h-4 inline mr-1" />Save presets for reuse</li>
-                    </ul>
-                  </div>
-                </div>
-              )}
-              {wizardStep === 2 && (
-                <div className="space-y-4">
-                  <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-                    <h3 className="font-medium text-purple-800 mb-2">Analyze Results</h3>
-                    <p className="text-sm text-purple-700">View infiltration curves and export data:</p>
-                    <ul className="mt-2 space-y-1 text-sm text-purple-700">
-                      <li><CheckCircle2 className="w-4 h-4 inline mr-1" />Compare multiple scenarios side-by-side</li>
-                      <li><CheckCircle2 className="w-4 h-4 inline mr-1" />Copy data to clipboard for spreadsheets</li>
-                      <li><CheckCircle2 className="w-4 h-4 inline mr-1" />Print reports for documentation</li>
-                    </ul>
-                  </div>
-                </div>
-              )}
-              <div className="flex justify-between pt-4">
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    localStorage.setItem("infiltration_wizard_completed", "true");
-                    setShowWizard(false);
-                  }}
-                  data-testid="wizard-skip"
-                >
-                  Skip
-                </Button>
-                <div className="flex gap-2">
-                  {wizardStep > 0 && (
-                    <Button variant="outline" onClick={() => setWizardStep(s => s - 1)} data-testid="wizard-back">
-                      Back
-                    </Button>
-                  )}
-                  {wizardStep < 2 ? (
-                    <Button onClick={() => setWizardStep(s => s + 1)} className="gap-1" data-testid="wizard-next">
-                      Next <ArrowRight className="w-4 h-4" />
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={() => {
-                        localStorage.setItem("infiltration_wizard_completed", "true");
-                        setShowWizard(false);
-                      }}
-                      className="gap-1 bg-green-600 hover:bg-green-700"
-                      data-testid="wizard-finish"
-                    >
-                      Get Started <CheckCircle2 className="w-4 h-4" />
-                    </Button>
-                  )}
-                </div>
-              </div>
-              <div className="flex justify-center gap-1.5 pt-2">
-                {[0, 1, 2].map(step => (
-                  <div
-                    key={step}
-                    className={`w-2 h-2 rounded-full transition-colors ${
-                      step === wizardStep ? "bg-green-600" : "bg-gray-300"
-                    }`}
-                  />
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
         {activeTab === "docs" ? (
@@ -1844,12 +1809,23 @@ function scsCurveNumber(CN, P) {
                         domain={[0, (dataMax: number) => Math.max(dataMax * 4, 0.1)]}
                         reversed
                       />
+                      <YAxis 
+                        yAxisId="cumulative"
+                        orientation="right"
+                        tick={{ fontSize: 10, fill: '#22c55e' }} 
+                        tickLine={false}
+                        axisLine={{ stroke: '#22c55e' }}
+                        label={{ value: `Cumulative (${getUnitLabel("length", units)})`, angle: 90, position: 'outsideRight', dx: 35, fontSize: 10, fill: '#22c55e' }}
+                        domain={[0, 'auto']}
+                      />
                       <Tooltip 
                         contentStyle={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', fontSize: '12px' }}
-                        formatter={(value: number, name: string) => [
-                          `${(units === "imperial" ? value : value * 25.4).toFixed(4)} ${getUnitLabel("rate", units)}`,
-                          name
-                        ]}
+                        formatter={(value: number, name: string) => {
+                          if (name === "Cumulative Infiltration") {
+                            return [`${(units === "imperial" ? value : value * 25.4).toFixed(3)} ${getUnitLabel("length", units)}`, name];
+                          }
+                          return [`${(units === "imperial" ? value : value * 25.4).toFixed(4)} ${getUnitLabel("rate", units)}`, name];
+                        }}
                         labelFormatter={(label) => `Time: ${label} hr`}
                       />
                       <Legend />
@@ -1930,6 +1906,16 @@ function scsCurveNumber(CN, P) {
                               dot={false}
                             />
                           )}
+                          <Area
+                            yAxisId="cumulative"
+                            type="monotone"
+                            dataKey="cumulativeInfiltration"
+                            name="Cumulative Infiltration"
+                            fill="#86efac"
+                            stroke="#22c55e"
+                            fillOpacity={0.2}
+                            strokeWidth={1.5}
+                          />
                         </>
                       )}
                     </ComposedChart>
@@ -2152,11 +2138,21 @@ function scsCurveNumber(CN, P) {
 
             {/* Interpretation Panel */}
             <Card className="border-indigo-200/60 shadow-lg">
-              <CardHeader className="pb-3">
+              <CardHeader className="pb-3 flex flex-row items-center justify-between">
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <Lightbulb className="w-5 h-5 text-indigo-600" />
                   Interpretation
                 </CardTitle>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="gap-2 text-indigo-700 border-indigo-200 hover:bg-indigo-50"
+                  onClick={copyResults}
+                  data-testid="btn-copy-results"
+                >
+                  <Copy className="w-4 h-4" />
+                  Copy Results
+                </Button>
               </CardHeader>
               <CardContent className="space-y-3">
                 <p className="text-sm text-gray-700">
