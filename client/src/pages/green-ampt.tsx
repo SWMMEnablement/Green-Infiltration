@@ -18,6 +18,7 @@ import {
   Printer,
   X,
   ChevronDown,
+  ChevronUp,
   HelpCircle,
   AlertTriangle,
   Image,
@@ -25,6 +26,7 @@ import {
   Copy,
   FileText
 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ComposedChart, LineChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine, Area } from "recharts";
 import {
   Dialog,
@@ -511,6 +513,7 @@ export default function GreenAmptPage() {
   const [savedPresets, setSavedPresets] = useState<SavedPreset[]>([]);
   const [presetName, setPresetName] = useState("");
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [methodRefOpen, setMethodRefOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"calculator" | "docs">("calculator");
 
   useEffect(() => {
@@ -2251,38 +2254,54 @@ function scsCurveNumber(CN, P) {
               </Card>
             )}
 
-            <Card className="border-green-200/60 shadow-lg shadow-green-500/5">
-              <CardHeader className="pb-4">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <BookOpen className="w-5 h-5 text-green-600" />
-                  Method Reference
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                    <p className="font-medium text-green-800 mb-2">Green-Ampt</p>
-                    <p className="text-xs text-green-700 font-mono mb-2">f = Ks × (1 + ψ × θd / F)</p>
-                    <p className="text-xs text-green-600">Physically-based model assuming a sharp wetting front.</p>
-                  </div>
-                  <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
-                    <p className="font-medium text-orange-800 mb-2">Horton</p>
-                    <p className="text-xs text-orange-700 font-mono mb-2">f = fc + (f₀ - fc) × e^(-kt)</p>
-                    <p className="text-xs text-orange-600">Empirical exponential decay model.</p>
-                  </div>
-                  <div className="p-4 bg-teal-50 rounded-lg border border-teal-200">
-                    <p className="font-medium text-teal-800 mb-2">Modified Green-Ampt</p>
-                    <p className="text-xs text-teal-700 font-mono mb-2">Includes moisture redistribution</p>
-                    <p className="text-xs text-teal-600">Accounts for soil recovery between rainfall events.</p>
-                  </div>
-                  <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-                    <p className="font-medium text-purple-800 mb-2">SCS Curve Number</p>
-                    <p className="text-xs text-purple-700 font-mono mb-2">Q = (P - Ia)² / (P - Ia + S)</p>
-                    <p className="text-xs text-purple-600">Event-based runoff abstraction method.</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <Collapsible open={methodRefOpen} onOpenChange={setMethodRefOpen}>
+              <Card className="border-green-200/60 shadow-lg shadow-green-500/5">
+                <CollapsibleTrigger asChild>
+                  <CardHeader className="pb-4 cursor-pointer hover:bg-green-50/50 transition-colors">
+                    <CardTitle className="flex items-center justify-between text-lg">
+                      <span className="flex items-center gap-2">
+                        <BookOpen className="w-5 h-5 text-green-600" />
+                        Method Reference
+                      </span>
+                      {methodRefOpen ? (
+                        <ChevronUp className="w-5 h-5 text-green-600" />
+                      ) : (
+                        <ChevronDown className="w-5 h-5 text-green-600" />
+                      )}
+                    </CardTitle>
+                    {!methodRefOpen && (
+                      <CardDescription className="text-xs text-green-600">Click to expand formula reference</CardDescription>
+                    )}
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                        <p className="font-medium text-green-800 mb-2">Green-Ampt</p>
+                        <p className="text-xs text-green-700 font-mono mb-2">f = Ks × (1 + ψ × θd / F)</p>
+                        <p className="text-xs text-green-600">Physically-based model assuming a sharp wetting front.</p>
+                      </div>
+                      <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
+                        <p className="font-medium text-orange-800 mb-2">Horton</p>
+                        <p className="text-xs text-orange-700 font-mono mb-2">f = fc + (f₀ - fc) × e^(-kt)</p>
+                        <p className="text-xs text-orange-600">Empirical exponential decay model.</p>
+                      </div>
+                      <div className="p-4 bg-teal-50 rounded-lg border border-teal-200">
+                        <p className="font-medium text-teal-800 mb-2">Modified Green-Ampt</p>
+                        <p className="text-xs text-teal-700 font-mono mb-2">Includes moisture redistribution</p>
+                        <p className="text-xs text-teal-600">Accounts for soil recovery between rainfall events.</p>
+                      </div>
+                      <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                        <p className="font-medium text-purple-800 mb-2">SCS Curve Number</p>
+                        <p className="text-xs text-purple-700 font-mono mb-2">Q = (P - Ia)² / (P - Ia + S)</p>
+                        <p className="text-xs text-purple-600">Event-based runoff abstraction method.</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
           </div>
         </div>
         )}
