@@ -605,8 +605,14 @@ export default function GreenAmptPage() {
   }, [scenarios]);
 
   const chartData = useMemo(() => {
+    const capRate = (rate: number, max: number = 20) => Math.min(rate, max);
+    
     if (!comparisonMode) {
-      return calculatedResults[activeScenarioIndex]?.data.filter((_, i) => i % 5 === 0) || [];
+      const data = calculatedResults[activeScenarioIndex]?.data || [];
+      return data.filter((_, i) => i % 5 === 0).map(d => ({
+        ...d,
+        infiltrationRate: capRate(d.infiltrationRate),
+      }));
     }
     const maxLength = Math.max(...calculatedResults.map(r => r.data.length));
     const combined: any[] = [];
@@ -623,7 +629,7 @@ export default function GreenAmptPage() {
       scenarios.forEach((s, idx) => {
         const dataPoint = calculatedResults[idx]?.data[i];
         if (dataPoint) {
-          point[`capacity_${idx}`] = dataPoint.infiltrationRate;
+          point[`capacity_${idx}`] = capRate(dataPoint.infiltrationRate);
           point[`actual_${idx}`] = dataPoint.actualInfiltrationRate;
           if (dataPoint.rainfallIntensity !== undefined && dataPoint.rainfallIntensity > maxRainfallIntensity) {
             maxRainfallIntensity = dataPoint.rainfallIntensity;
@@ -1797,8 +1803,9 @@ function scsCurveNumber(CN, P) {
                         yAxisId="left"
                         tick={{ fontSize: 12 }} 
                         tickLine={false}
-                        domain={[0, 'auto']}
+                        domain={[0, (dataMax: number) => Math.max(dataMax * 1.1, 1)]}
                         label={{ value: `Rate (${getUnitLabel("rate", units)})`, angle: -90, position: 'insideLeft', fontSize: 12 }}
+                        width={50}
                       />
                       <YAxis 
                         yAxisId="right"
