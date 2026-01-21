@@ -1882,6 +1882,7 @@ function scsCurveNumber(CN, P) {
                         
                         const balanceSum = totalInfiltration + totalRunoff;
                         const balancePct = totalRainfall > 0 ? (balanceSum / totalRainfall) * 100 : 100;
+                        const continuityError = totalRainfall > 0 ? ((balanceSum - totalRainfall) / totalRainfall) * 100 : 0;
                         
                         return (
                           <>
@@ -1900,20 +1901,28 @@ function scsCurveNumber(CN, P) {
                               <TableCell className="text-right font-mono">{convertDepth(totalRunoff).toFixed(3)}</TableCell>
                               <TableCell className="text-right font-mono">{pctOf(totalRunoff)}%</TableCell>
                             </TableRow>
-                            <TableRow className={`border-t-2 ${balanceOk ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'}`}>
-                              <TableCell className="font-semibold flex items-center gap-2">
-                                Mass Balance
-                                {balanceOk ? (
-                                  <span className="text-green-600 text-xs">✓ Verified</span>
-                                ) : (
-                                  <span className="text-red-600 text-xs">⚠ Error</span>
-                                )}
-                              </TableCell>
+                            <TableRow className="border-t-2 border-gray-300 bg-gray-50">
+                              <TableCell className="font-semibold">Balance Check</TableCell>
                               <TableCell className="text-right font-mono font-semibold">
                                 {convertDepth(balanceSum).toFixed(3)}
                               </TableCell>
-                              <TableCell className={`text-right font-mono font-semibold ${balanceOk ? 'text-green-700' : 'text-red-700'}`}>
+                              <TableCell className="text-right font-mono font-semibold">
                                 {balancePct.toFixed(1)}%
+                              </TableCell>
+                            </TableRow>
+                            <TableRow className={`${balanceOk ? 'bg-green-50' : 'bg-red-50'}`}>
+                              <TableCell className="font-semibold flex items-center gap-2">
+                                Continuity Error
+                                {balanceOk ? (
+                                  <span className="text-green-600 text-xs">✓ OK</span>
+                                ) : (
+                                  <span className="text-red-600 text-xs">⚠ High</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right font-mono font-semibold" colSpan={2}>
+                                <span className={balanceOk ? 'text-green-700' : 'text-red-700'}>
+                                  {continuityError >= 0 ? '+' : ''}{continuityError.toFixed(2)}%
+                                </span>
                               </TableCell>
                             </TableRow>
                           </>
