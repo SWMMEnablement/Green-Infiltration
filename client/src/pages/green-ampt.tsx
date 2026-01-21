@@ -23,9 +23,10 @@ import {
   Image,
   Sparkles,
   ArrowRight,
-  CheckCircle2
+  CheckCircle2,
+  Lightbulb
 } from "lucide-react";
-import { ComposedChart, LineChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { ComposedChart, LineChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine, Area } from "recharts";
 import {
   Dialog,
   DialogContent,
@@ -240,6 +241,49 @@ const soilPresets = {
   siltLoam: { suctionHead: 16.68, conductivity: 0.26, initialDeficit: 0.26, saturatedContent: 0.501, fieldCapacity: 0.28 },
   clay: { suctionHead: 31.63, conductivity: 0.01, initialDeficit: 0.22, saturatedContent: 0.475, fieldCapacity: 0.38 }
 };
+
+const scenarioLibrary: { name: string; description: string; params: ScenarioParams }[] = [
+  {
+    name: "Parking Lot Storm",
+    description: "2-inch storm on compacted urban soil - high runoff expected",
+    params: { name: "Parking Lot", method: "greenAmpt", duration: 2, suctionHead: 8.0, conductivity: 0.05, initialDeficit: 0.15, rainfallRate: 2.0, rainfallDistribution: "scsTypeII" }
+  },
+  {
+    name: "Sandy Meadow",
+    description: "Moderate rain on sandy grassland - good infiltration",
+    params: { name: "Sandy Meadow", method: "greenAmpt", duration: 6, suctionHead: 4.95, conductivity: 4.74, initialDeficit: 0.34, rainfallRate: 1.0, rainfallDistribution: "constant" }
+  },
+  {
+    name: "Clay Field (Heavy Storm)",
+    description: "Intense rainfall on clay soil - early ponding expected",
+    params: { name: "Clay Storm", method: "greenAmpt", duration: 6, suctionHead: 31.63, conductivity: 0.01, initialDeficit: 0.22, rainfallRate: 3.0, rainfallDistribution: "scsTypeII" }
+  },
+  {
+    name: "Suburban Lawn",
+    description: "Typical residential lawn on loam soil with SCS Type II storm",
+    params: { name: "Suburban Lawn", method: "curveNumber", duration: 6, curveNumber: 68, rainfall: 4.0, initialAbstraction: 0.2 }
+  },
+  {
+    name: "Forest Watershed",
+    description: "Low runoff from forested area with good soil structure",
+    params: { name: "Forest", method: "curveNumber", duration: 12, curveNumber: 45, rainfall: 6.0, initialAbstraction: 0.2 }
+  },
+  {
+    name: "Industrial Site",
+    description: "High CN for developed area with impervious surfaces",
+    params: { name: "Industrial", method: "curveNumber", duration: 6, curveNumber: 92, rainfall: 3.5, initialAbstraction: 0.2 }
+  },
+  {
+    name: "Dry Loam (Horton)",
+    description: "Classic Horton decay on dry loamy soil",
+    params: { name: "Dry Loam", method: "horton", duration: 6, maxRate: 3.0, minRate: 0.5, decayConstant: 2.0 }
+  },
+  {
+    name: "Wet Clay (Horton)",
+    description: "Low infiltration on pre-wetted clay soil",
+    params: { name: "Wet Clay", method: "horton", duration: 6, maxRate: 0.8, minRate: 0.05, decayConstant: 4.0 }
+  }
+];
 
 const methodColors = {
   greenAmpt: "#16a34a",
@@ -1637,6 +1681,38 @@ function scsCurveNumber(CN, P) {
                 </ScrollArea>
               </CardContent>
             </Card>
+
+            {/* Scenario Library */}
+            <Card className="border-indigo-200/60 shadow-lg">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <BookOpen className="w-5 h-5 text-indigo-600" />
+                  Example Scenarios
+                </CardTitle>
+                <CardDescription>Pre-built examples to learn and modify</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ScrollArea className="h-[200px]">
+                  <div className="space-y-2">
+                    {scenarioLibrary.map((scenario, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          const newScenarios = [...scenarios];
+                          newScenarios[activeScenarioIndex] = { ...scenario.params };
+                          setScenarios(newScenarios);
+                        }}
+                        className="w-full text-left p-3 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors"
+                        data-testid={`scenario-${idx}`}
+                      >
+                        <p className="text-sm font-medium text-indigo-800">{scenario.name}</p>
+                        <p className="text-xs text-indigo-600 mt-0.5">{scenario.description}</p>
+                      </button>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
           </div>
 
           <div className="lg:col-span-2 space-y-6 print-section" ref={printRef}>
@@ -1774,8 +1850,20 @@ function scsCurveNumber(CN, P) {
                           `${(units === "imperial" ? value : value * 25.4).toFixed(4)} ${getUnitLabel("rate", units)}`,
                           name
                         ]}
+                        labelFormatter={(label) => `Time: ${label} hr`}
                       />
                       <Legend />
+                      {/* Ponding marker */}
+                      {!comparisonMode && currentResult?.timeToPonding && (
+                        <ReferenceLine 
+                          yAxisId="left"
+                          x={currentResult.timeToPonding} 
+                          stroke="#f97316" 
+                          strokeDasharray="5 5" 
+                          strokeWidth={2}
+                          label={{ value: 'Ponding', fill: '#f97316', fontSize: 11, position: 'top' }}
+                        />
+                      )}
                       {hasRainfall && (
                         <Bar
                           yAxisId="right"
@@ -2062,11 +2150,103 @@ function scsCurveNumber(CN, P) {
               </div>
             )}
 
-            <div className="p-4 rounded-xl bg-blue-50 border border-blue-200">
-              <p className="text-sm text-blue-800" data-testid="result-summary">
-                {generateSummaryStatement(currentData, current, currentResult)}
-              </p>
-            </div>
+            {/* Interpretation Panel */}
+            <Card className="border-indigo-200/60 shadow-lg">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Lightbulb className="w-5 h-5 text-indigo-600" />
+                  Interpretation
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-gray-700">
+                  {generateSummaryStatement(currentData, current, currentResult)}
+                </p>
+                {(() => {
+                  const insights: string[] = [];
+                  const finalRate = currentData[currentData.length - 1]?.actualInfiltrationRate || 0;
+                  const initialRate = currentData[0]?.infiltrationRate || 0;
+                  const totalInf = currentData[currentData.length - 1]?.cumulativeInfiltration || 0;
+                  
+                  if (current.method === "greenAmpt" || current.method === "modifiedGreenAmpt") {
+                    const ratioDecline = initialRate > 0 ? ((1 - finalRate / initialRate) * 100).toFixed(0) : 0;
+                    insights.push(`Infiltration rate declined ${ratioDecline}% from initial to final, as soil pores filled with water.`);
+                    
+                    if (current.rainfallRate > 0 && currentResult?.timeToPonding) {
+                      insights.push(`Ponding begins at ${currentResult.timeToPonding.toFixed(1)} hours when rainfall exceeds soil capacity. After this point, excess water becomes runoff.`);
+                    }
+                    
+                    if (currentResult?.totalRunoff && currentResult.totalRunoff > 0) {
+                      const runoffPct = currentResult.totalRainfall > 0 
+                        ? ((currentResult.totalRunoff / currentResult.totalRainfall) * 100).toFixed(0) 
+                        : 0;
+                      insights.push(`About ${runoffPct}% of rainfall became runoff. This is typical for ${current.conductivity < 0.1 ? 'clay soils with low conductivity' : current.conductivity > 1 ? 'sandy soils under heavy rain' : 'loamy soils under moderate rain'}.`);
+                    }
+                    
+                    if (finalRate > 0.1) {
+                      insights.push(`Final infiltration rate of ${(units === "imperial" ? finalRate : finalRate * 25.4).toFixed(2)} ${getUnitLabel("rate", units)} approaches the saturated conductivity (Ks), the theoretical long-term limit.`);
+                    }
+                  } else if (current.method === "horton") {
+                    insights.push(`The Horton model shows exponential decay from ${current.maxRate.toFixed(1)} to ${current.minRate.toFixed(1)} ${getUnitLabel("rate", units)} with decay constant k=${current.decayConstant}/hr.`);
+                  } else if (current.method === "curveNumber") {
+                    const S = (1000 / current.curveNumber) - 10;
+                    insights.push(`With CN=${current.curveNumber}, the soil can retain up to ${S.toFixed(1)} inches before runoff accelerates.`);
+                    if (current.curveNumber > 85) {
+                      insights.push("High curve number indicates impervious conditions (urban areas, compacted soil, or steep slopes).");
+                    } else if (current.curveNumber < 60) {
+                      insights.push("Low curve number indicates good infiltration conditions (forests, meadows, or sandy soils).");
+                    }
+                  }
+                  
+                  return insights.length > 0 ? (
+                    <ul className="text-sm text-gray-600 space-y-2 mt-2 border-t pt-3">
+                      {insights.map((insight, idx) => (
+                        <li key={idx} className="flex items-start gap-2">
+                          <span className="text-indigo-500 mt-1">•</span>
+                          <span>{insight}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null;
+                })()}
+              </CardContent>
+            </Card>
+
+            {/* Live Formula Display */}
+            {(current.method === "greenAmpt" || current.method === "modifiedGreenAmpt") && (
+              <Card className="border-green-200/60 shadow-lg">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Calculator className="w-5 h-5 text-green-600" />
+                    Live Formula Calculation
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {(() => {
+                    const F = currentData[Math.floor(currentData.length / 2)]?.cumulativeInfiltration || 0.5;
+                    const rate = current.conductivity * (1 + (current.suctionHead * current.initialDeficit) / F);
+                    return (
+                      <div className="space-y-3">
+                        <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                          <p className="text-xs text-green-600 mb-1">Green-Ampt Equation:</p>
+                          <p className="font-mono text-sm text-green-800">f = Ks × (1 + ψ × θd / F)</p>
+                        </div>
+                        <div className="p-3 bg-gray-50 rounded-lg border">
+                          <p className="text-xs text-gray-600 mb-1">With your current values at mid-simulation (F = {F.toFixed(2)} {getUnitLabel("length", units)}):</p>
+                          <p className="font-mono text-sm text-gray-800">
+                            f = {current.conductivity.toFixed(2)} × (1 + ({current.suctionHead.toFixed(1)} × {current.initialDeficit.toFixed(2)}) / {F.toFixed(2)})
+                          </p>
+                          <p className="font-mono text-sm text-green-700 font-semibold mt-1">
+                            f = {rate.toFixed(3)} {getUnitLabel("rate", units)}
+                          </p>
+                        </div>
+                        <p className="text-xs text-gray-500">As cumulative infiltration (F) increases, the rate (f) decreases toward Ks = {current.conductivity} {getUnitLabel("rate", units)}.</p>
+                      </div>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
+            )}
 
             <Card className="border-green-200/60 shadow-lg shadow-green-500/5">
               <CardHeader className="pb-4">

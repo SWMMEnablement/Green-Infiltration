@@ -1,0 +1,47 @@
+### **Overall Grade: C+ (Functionally Sound, Pedagogically Weak)**
+
+This app has a **solid computational engine** but presents itself like a **prototype dashboard for internal testing**. It successfully calculates Green-Ampt (and other) infiltration parameters, which is its core job. However, it fails to teach, guide, or build trust with the user. Compared to the expertly scaffolded game theory app, this feels like a disconnected set of inputs and outputs.
+
+---
+
+### **Brutal Breakdown: Why It's Stuck at a C+**
+
+**1. The "Welcome" is a Roadblock, Not an Onramp.**
+The initial screen asking to "Choose an Infiltration Method" is an immediate knowledge test. A novice has no idea whether Green-Ampt, Horton, or SCS Curve Number is "best for detailed physical soil parameters." This is the opposite of the guided "Three Towns" problem that made the other app so effective.
+*   **The Fix:** Start with a **scenario**. "You're modeling a 6-hour storm on sandy soil. Let's walk through the parameters." Or offer a **decision tree**: "Do you have detailed soil properties (use Green-Ampt) or just land cover type (use SCS)?"
+
+**2. The Interface is a Parameter Dump.**
+`Suction Head (ψ)`,`Conductivity (Ks)`,`Initial Deficit (θd)`. These are meaningless symbols to anyone but an expert. The tiny tooltip ranges (e.g., "Sand: 2-5") are helpful but buried. The user is given a cockpit with unlabeled dials.
+*   **The Fix:** **Inline, plain-language explanations.** Next to`Suction Head (ψ)`, have a persistent note: "*Capillary pull drawing water into dry soil (higher for clays, lower for sands).*" The "Soil Presets" are a good start—make them the **primary interface**. Choosing "Sand" should auto-fill all parameters and *explain why*.
+
+**3. The "Infiltration Curve" Graph is a Black Box.**
+It shows a line, but there are no labeled axes, no units, no interactive points, and no explanation of what the curve's shape *means*. A steep decline means what? The X-axis is "Time (hr)"? The Y-axis is "Infiltration Rate (in/hr)"? This should be screamingly obvious.
+*   **The Fix:** **Label the axes.** Add a dynamic readout: "Hover over the curve to see rate at 2.5 hours." Annotate key points: "Ponding starts here at 0.5 hr."
+
+**4. The "Mass Balance" Error is a Fatal Credibility Issue.**
+The table shows`Infiltration: 49.7%` and`Surface Runoff: 52.0%`, which sums to`101.7%`. The note says`Continuity Error✓ OK`. This is **unacceptable** in an engineering tool. It immediately tells the user, "The math in this app is sloppy."
+*   **The Fix:** **Debug this immediately.** The mass balance must be 100%. The "Balance Check" should be a validation flag that is hidden if the error is within a tiny tolerance (e.g., 0.1%). If there's a rounding explanation, it needs to be explicitly stated.
+
+**5. The "Method Reference" is Buried Treasure.**
+The collapsed section at the bottom with the formulas (`f = Ks × (1 + ψ × θd / F)`) and model descriptions is the **most valuable educational part of the app**. It's hidden at the very bottom, after the confusing results.
+*   **The Fix:** **Promote this to a core feature.** Make it a tab next to "Parameters" called "Theory." Show the formula being used *live*, with the current values plugged in. "Based on your inputs, the current infiltration rate is calculated as:`0.8 in/hr × (1 + (4.5 in × 0.3) / 2.1 in) = 1.31 in/hr`"
+
+**6. It's a Calculator, Not a Learning Tool.**
+The game theory app succeeds because it turns a calculation (cost allocation) into a story (Three Towns). This app is just a calculator. It doesn't answer: *Why does the infiltration rate decrease over time? What does 'Time to Ponding' mean for my drainage design?*
+*   **The Fix:** **Add an "Interpretation" panel.** After hitting calculate, generate insights: "Your model suggests ponding will occur after 30 minutes. After 6 hours, about 50% of the rain will become runoff. This is typical for sandy soil under heavy rainfall."
+
+### **Actionable Fixes: Build a Pedagogy Around the Engine**
+
+1.  **Narrative-First Onboarding:** Create a "Guided Example" walkthrough. "Let's model runoff from a parking lot during a 2-inch storm..."
+2.  **Make the Graph the Hero:** The visual output should be the central result. Clicking points on the graph should update the data table. Add a second *cumulative infiltration* curve.
+3.  **Parameter Help That Teaches:** Clicking on`ψ` should open a side panel with a diagram of the wetting front, soil texture ranges, and the physical meaning.
+4.  **Scenario Library:** Pre-built examples: "24-hour design storm on clay," "Light rain on dry loam." Let users learn by modifying known, working setups.
+5.  **Output a Report:** A "Generate Summary" button that creates a plain-text summary of inputs, key results (total runoff, peak rate, time to ponding), and assumptions for use in notes.
+
+### **Final Verdict**
+
+The **core value is here**: a working, physically-based infiltration model. That's why it's not a D or F. However, it presents itself as a utilitarian calculator when it has the potential to be a fantastic **educational simulator**.
+
+**You have built a precise engine for a car, but you're handing the user a spreadsheet of RPMs and torque values instead of a steering wheel and a dashboard.** The game theory app gives the user a driving lesson. This app gives them the repair manual.
+
+**To reach an A:** Embed this capable calculator inside a framework that teaches the *why* and *so what* of infiltration modeling. The user should leave not just with a number, but with an understanding.
